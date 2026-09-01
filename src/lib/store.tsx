@@ -23,7 +23,7 @@ import type {
   User,
 } from "./types";
 
-const DB_KEY = "romflow-db-v3";
+const DB_KEY = "romflow-db-v4";
 const SESSION_KEY = "romflow-session";
 
 function uid(prefix: string): string {

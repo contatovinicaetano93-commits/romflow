@@ -6,7 +6,32 @@ import { CATEGORY_COLOR, KINDNESS_PHRASES, money, parseDate } from "@/lib/format
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
 import { StatusBadge } from "./status-badge";
 
-const MONTHS = ["Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function lastSixMonthBuckets(now: number): { label: string; start: number; end: number }[] {
+  const date = new Date(now);
+  const buckets: { label: string; start: number; end: number }[] = [];
+  for (let offset = 5; offset >= 0; offset -= 1) {
+    const startDate = new Date(date.getFullYear(), date.getMonth() - offset, 1);
+    const endDate = new Date(date.getFullYear(), date.getMonth() - offset + 1, 1);
+    buckets.push({
+      label: MONTH_LABELS[startDate.getMonth()],
+      start: startDate.getTime(),
+      end: endDate.getTime(),
+    });
+  }
+  return buckets;
+}
+
+function chartLine(values: number[], max: number): string {
+  return values
+    .map((value, index) => {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * 500;
+      const y = max === 0 ? 160 : 160 - (value / max) * 132;
+      return `${index === 0 ? "M" : "L"}${x} ${y}`;
+    })
+    .join(" ");
+}
 
 export function Dashboard({
   role,
@@ -73,7 +98,7 @@ export function Dashboard({
             value: money(total),
             foot: `${expenses.length} solicitações`,
             icon: LayoutDashboard,
-            trend: "+12,4% no período",
+            trend: "No período",
             tone: "emerald",
           },
         ]
@@ -110,7 +135,7 @@ export function Dashboard({
               value: money(paidTotal),
               foot: `${paid.length} pagamentos`,
               icon: Wallet,
-              trend: "+8,2% vs. mês anterior",
+              trend: "No período",
               tone: "emerald",
             },
             {
@@ -130,6 +155,24 @@ export function Dashboard({
               tone: "violet",
             },
           ];
+
+  const monthBuckets = lastSixMonthBuckets(now);
+  const monthValues = monthBuckets.map((bucket) =>
+    expenses
+      .filter((item) => {
+        const created = new Date(item.created).getTime();
+        return created >= bucket.start && created < bucket.end;
+      })
+      .reduce((sum, item) => sum + item.amount, 0),
+  );
+  const maxMonth = Math.max(...monthValues, 0);
+  const previousMonth = monthValues[monthValues.length - 2] ?? 0;
+  const currentMonth = monthValues[monthValues.length - 1] ?? 0;
+  const monthTrend =
+    previousMonth > 0
+      ? `${currentMonth >= previousMonth ? "+" : ""}${(((currentMonth - previousMonth) / previousMonth) * 100).toFixed(1).replace(".", ",")}%`
+      : "—";
+  const linePath = chartLine(monthValues, maxMonth);
 
   return (
     <div className="page-stack">
@@ -235,7 +278,9 @@ export function Dashboard({
               <h3>Tendência de gastos</h3>
               <p>Últimos 6 meses</p>
             </div>
-            <span className="positive-trend">+12,4%</span>
+            <span className={previousMonth > 0 && currentMonth >= previousMonth ? "positive-trend" : undefined}>
+              {monthTrend}
+            </span>
           </header>
           <div className="line-chart">
             <div className="line-grid" />
@@ -246,21 +291,12 @@ export function Dashboard({
                   <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
                 </linearGradient>
               </defs>
-              <path
-                d="M0 140 C60 150 80 110 130 118 S200 135 245 92 S330 110 372 66 S445 72 500 28 L500 180 L0 180 Z"
-                fill="url(#area)"
-              />
-              <path
-                d="M0 140 C60 150 80 110 130 118 S200 135 245 92 S330 110 372 66 S445 72 500 28"
-                fill="none"
-                stroke="#10B981"
-                strokeWidth="4"
-              />
-              <circle cx="500" cy="28" r="6" fill="#0A0A0B" stroke="#10B981" strokeWidth="4" />
+              <path d={`${linePath} L500 180 L0 180 Z`} fill="url(#area)" />
+              <path d={linePath} fill="none" stroke="#10B981" strokeWidth="4" />
             </svg>
             <div className="chart-labels">
-              {MONTHS.map((month) => (
-                <span key={month}>{month}</span>
+              {monthBuckets.map((item) => (
+                <span key={item.start}>{item.label}</span>
               ))}
             </div>
           </div>
