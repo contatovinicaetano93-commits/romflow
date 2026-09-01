@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { SEED } from "./seed";
+import { SEED, SEED_REVISION } from "./seed";
 import type {
   AuditAction,
   Category,
@@ -23,8 +23,10 @@ import type {
   User,
 } from "./types";
 
-const DB_KEY = "romflow-db-v4";
+/** Client persistence. Swap readDb/writeDb for a remote database when plugging one in. */
+const DB_KEY = "romflow-db-v6";
 const SESSION_KEY = "romflow-session";
+const LEGACY_DB_KEYS = ["romflow-db", "romflow-db-v2", "romflow-db-v3", "romflow-db-v4", "romflow-db-v5"];
 
 function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -34,20 +36,35 @@ function cloneSeed(): Database {
   return structuredClone(SEED);
 }
 
+function clearLegacyStorage() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  for (const key of LEGACY_DB_KEYS) {
+    window.localStorage.removeItem(key);
+  }
+}
+
 function readDb(): Database {
   if (typeof window === "undefined") {
     return cloneSeed();
   }
+  clearLegacyStorage();
   try {
     const raw = window.localStorage.getItem(DB_KEY);
     if (!raw) {
       return cloneSeed();
     }
     const parsed = JSON.parse(raw) as Database;
-    if (!parsed.users?.length || !parsed.companies?.length) {
+    if (parsed.revision !== SEED_REVISION || !parsed.users?.length || !parsed.companies?.length) {
       return cloneSeed();
     }
-    return parsed;
+    return {
+      ...parsed,
+      expenses: parsed.expenses ?? [],
+      invitations: parsed.invitations ?? [],
+      auditLogs: parsed.auditLogs ?? [],
+    };
   } catch {
     return cloneSeed();
   }
@@ -92,8 +109,9 @@ function getSessionSnapshot(): string | null {
 }
 
 function persistDb(next: Database) {
-  clientDb = next;
-  writeDb(next);
+  const stamped: Database = { ...next, revision: SEED_REVISION };
+  clientDb = stamped;
+  writeDb(stamped);
   dbListeners.forEach((listener) => listener());
 }
 

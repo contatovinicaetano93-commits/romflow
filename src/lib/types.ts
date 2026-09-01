@@ -131,6 +131,7 @@ export type AuditLog = {
 };
 
 export type Database = {
+  revision: number;
   companies: Company[];
   categories: Category[];
   users: User[];

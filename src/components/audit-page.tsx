@@ -46,8 +46,8 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
         <article>
           <Shield size={18} />
           <div>
-            <strong>100%</strong>
-            <span>ações rastreadas</span>
+            <strong>{logs.length === 0 ? "—" : "100%"}</strong>
+            <span>{logs.length === 0 ? "aguardando eventos" : "ações rastreadas"}</span>
           </div>
         </article>
       </section>

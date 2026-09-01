@@ -124,8 +124,16 @@ export function ExpenseList({
         </div>
         {filtered.length === 0 ? (
           <div className="empty-state">
-            <strong>Nenhuma solicitação encontrada</strong>
-            <span>Ajuste os filtros ou faça um novo pedido de pagamento.</span>
+            <strong>
+              {expenses.length === 0
+                ? "Nenhuma solicitação neste negócio."
+                : "Nenhuma solicitação encontrada"}
+            </strong>
+            <span>
+              {expenses.length === 0
+                ? "Crie a primeira solicitação para começar a testar o fluxo."
+                : "Ajuste os filtros ou faça um novo pedido de pagamento."}
+            </span>
           </div>
         ) : (
           <div className="expense-table-wrap">

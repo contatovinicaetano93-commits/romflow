@@ -51,6 +51,7 @@ export function Dashboard({
   onOpenExpense: (expense: Expense) => void;
 }) {
   const [now] = useState(() => Date.now());
+  const isEmpty = expenses.length === 0;
   const paid = expenses.filter((item) => item.status === "paga");
   const pending = expenses.filter((item) => !["paga", "recusada"].includes(item.status));
   const urgent = pending.filter(
@@ -109,7 +110,7 @@ export function Dashboard({
               value: money(total),
               foot: `${expenses.length} registros`,
               icon: LayoutDashboard,
-              trend: "Todas as operações",
+              trend: isEmpty ? "Sem movimentações" : "Todas as operações",
               tone: "violet",
             },
             {
@@ -125,7 +126,7 @@ export function Dashboard({
               value: money(paidTotal),
               foot: `${paid.length} pagamentos`,
               icon: CheckCircle2,
-              trend: "Governança ativa",
+              trend: isEmpty ? "Aguardando pagamentos" : "Governança ativa",
               tone: "emerald",
             },
           ]
@@ -169,9 +170,9 @@ export function Dashboard({
   const previousMonth = monthValues[monthValues.length - 2] ?? 0;
   const currentMonth = monthValues[monthValues.length - 1] ?? 0;
   const monthTrend =
-    previousMonth > 0
-      ? `${currentMonth >= previousMonth ? "+" : ""}${(((currentMonth - previousMonth) / previousMonth) * 100).toFixed(1).replace(".", ",")}%`
-      : "—";
+    isEmpty || previousMonth <= 0
+      ? "—"
+      : `${currentMonth >= previousMonth ? "+" : ""}${(((currentMonth - previousMonth) / previousMonth) * 100).toFixed(1).replace(".", ",")}%`;
   const linePath = chartLine(monthValues, maxMonth);
 
   return (
@@ -255,22 +256,29 @@ export function Dashboard({
             </div>
             <button type="button">Este mês</button>
           </header>
-          <div className="bar-chart">
-            {categoryStats.map((item) => (
-              <div key={item.category}>
-                <span className="bar-value">{item.value ? money(item.value) : "—"}</span>
-                <span className="bar-track">
-                  <i
-                    style={{
-                      height: `${Math.max((item.value / maxCategory) * 100, 4)}%`,
-                      background: item.color,
-                    }}
-                  />
-                </span>
-                <strong>{item.category}</strong>
-              </div>
-            ))}
-          </div>
+          {isEmpty ? (
+            <div className="empty-state">
+              <strong>Nenhuma despesa neste negócio.</strong>
+              <span>As categorias aparecem quando houver solicitações.</span>
+            </div>
+          ) : (
+            <div className="bar-chart">
+              {categoryStats.map((item) => (
+                <div key={item.category}>
+                  <span className="bar-value">{item.value ? money(item.value) : "—"}</span>
+                  <span className="bar-track">
+                    <i
+                      style={{
+                        height: `${item.value === 0 ? 0 : Math.max((item.value / maxCategory) * 100, 4)}%`,
+                        background: item.color,
+                      }}
+                    />
+                  </span>
+                  <strong>{item.category}</strong>
+                </div>
+              ))}
+            </div>
+          )}
         </article>
         <article className="panel trend-panel">
           <header className="panel-header">
@@ -282,24 +290,31 @@ export function Dashboard({
               {monthTrend}
             </span>
           </header>
-          <div className="line-chart">
-            <div className="line-grid" />
-            <svg viewBox="0 0 500 180" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity=".28" />
-                  <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d={`${linePath} L500 180 L0 180 Z`} fill="url(#area)" />
-              <path d={linePath} fill="none" stroke="#10B981" strokeWidth="4" />
-            </svg>
-            <div className="chart-labels">
-              {monthBuckets.map((item) => (
-                <span key={item.start}>{item.label}</span>
-              ))}
+          {isEmpty ? (
+            <div className="empty-state">
+              <strong>Sem tendência ainda.</strong>
+              <span>O gráfico dos últimos 6 meses aparece com as primeiras despesas.</span>
             </div>
-          </div>
+          ) : (
+            <div className="line-chart">
+              <div className="line-grid" />
+              <svg viewBox="0 0 500 180" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity=".28" />
+                    <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path d={`${linePath} L500 180 L0 180 Z`} fill="url(#area)" />
+                <path d={linePath} fill="none" stroke="#10B981" strokeWidth="4" />
+              </svg>
+              <div className="chart-labels">
+                {monthBuckets.map((item) => (
+                  <span key={item.start}>{item.label}</span>
+                ))}
+              </div>
+            </div>
+          )}
         </article>
         <article className="panel activity-panel">
           <header className="panel-header">

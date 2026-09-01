@@ -1,6 +1,9 @@
 import type { Database } from "./types";
 
+export const SEED_REVISION = 6;
+
 export const SEED: Database = {
+  revision: SEED_REVISION,
   companies: [
     {
       id: "cmp_baru_brasil",

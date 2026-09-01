@@ -56,3 +56,17 @@ body {
   background: #71717a;
   border-radius: 999px;
 }
+
+.chart-panel .empty-state,
+.trend-panel .empty-state,
+.report-status .empty-state,
+.report-category + .empty-state,
+.panel .empty-state {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+}

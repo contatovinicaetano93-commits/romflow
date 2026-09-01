@@ -154,8 +154,14 @@ export function FinancePage({
         </div>
         {filtered.length === 0 ? (
           <div className="empty-state">
-            <strong>Tudo em dia por aqui</strong>
-            <span>Não há solicitações nessa etapa.</span>
+            <strong>
+              {expenses.length === 0 ? "Nenhuma solicitação neste negócio." : "Tudo em dia por aqui"}
+            </strong>
+            <span>
+              {expenses.length === 0
+                ? "O fluxo começa vazio para você testar com dados reais."
+                : "Não há solicitações nessa etapa."}
+            </span>
           </div>
         ) : (
           <div className="approval-list">

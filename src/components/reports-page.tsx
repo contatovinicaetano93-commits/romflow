@@ -36,6 +36,7 @@ export function ReportsPage({
     count: expenses.filter((item) => item.status === status).length,
   }));
   const paidPct = expenses.length ? Math.round((paid.length / expenses.length) * 100) : 0;
+  const isEmpty = expenses.length === 0;
 
   return (
     <div className="page-stack">
@@ -84,17 +85,24 @@ export function ReportsPage({
               <p>Participação no valor total</p>
             </div>
           </header>
-          <div className="report-category">
-            {categories.map((item) => (
-              <div key={item.name}>
-                <strong>{item.name}</strong>
-                <div className="report-progress">
-                  <i style={{ width: `${item.pct}%`, background: item.color }} />
+          {isEmpty ? (
+            <div className="empty-state">
+              <strong>Nenhuma despesa para distribuir.</strong>
+              <span>Este relatório fica vazio até existir a primeira solicitação.</span>
+            </div>
+          ) : (
+            <div className="report-category">
+              {categories.map((item) => (
+                <div key={item.name}>
+                  <strong>{item.name}</strong>
+                  <div className="report-progress">
+                    <i style={{ width: `${item.pct}%`, background: item.color }} />
+                  </div>
+                  <strong>{money(item.value)}</strong>
                 </div>
-                <strong>{money(item.value)}</strong>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </article>
         <article className="panel report-status">
           <header className="panel-header">
@@ -103,34 +111,52 @@ export function ReportsPage({
               <p>Solicitações por etapa</p>
             </div>
           </header>
-          <div
-            className="donut"
-            style={{
-              background: `conic-gradient(#10b981 0 ${paidPct}%, #6366f1 ${paidPct}% ${Math.min(paidPct + 25, 100)}%, #f59e0b ${Math.min(paidPct + 25, 100)}% 100%)`,
-            }}
-          >
-            <span>
-              <strong>{paidPct}%</strong>
-              <small>Total</small>
-            </span>
-          </div>
-          <div className="donut-legend">
-            <span>
-              <i className="emerald" /> Pago
-            </span>
-            <span>
-              <i className="violet" /> Em fluxo
-            </span>
-            <span>
-              <i className="amber" /> Pendências
-            </span>
-          </div>
-          {byStatus.map((item) => (
-            <div key={item.status} style={{ padding: "8px 20px", display: "flex", justifyContent: "space-between", fontSize: 11, color: "#a1a1aa" }}>
-              <span>{STATUS_LABEL[item.status]}</span>
-              <strong style={{ color: "#fff" }}>{item.count}</strong>
+          {isEmpty ? (
+            <div className="empty-state">
+              <strong>Fluxo ainda sem solicitações.</strong>
+              <span>As etapas aparecem conforme o negócio começar a operar.</span>
             </div>
-          ))}
+          ) : (
+            <>
+              <div
+                className="donut"
+                style={{
+                  background: `conic-gradient(#10b981 0 ${paidPct}%, #6366f1 ${paidPct}% ${Math.min(paidPct + 25, 100)}%, #f59e0b ${Math.min(paidPct + 25, 100)}% 100%)`,
+                }}
+              >
+                <span>
+                  <strong>{paidPct}%</strong>
+                  <small>Total</small>
+                </span>
+              </div>
+              <div className="donut-legend">
+                <span>
+                  <i className="emerald" /> Pago
+                </span>
+                <span>
+                  <i className="violet" /> Em fluxo
+                </span>
+                <span>
+                  <i className="amber" /> Pendências
+                </span>
+              </div>
+              {byStatus.map((item) => (
+                <div
+                  key={item.status}
+                  style={{
+                    padding: "8px 20px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 11,
+                    color: "#a1a1aa",
+                  }}
+                >
+                  <span>{STATUS_LABEL[item.status]}</span>
+                  <strong style={{ color: "#fff" }}>{item.count}</strong>
+                </div>
+              ))}
+            </>
+          )}
         </article>
       </section>
     </div>
