@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import {
   createContext,
   useCallback,
@@ -32,6 +33,14 @@ const EMPTY_DB: Database = {
   expenses: [],
   auditLogs: [],
 };
+
+function syncSentryUser(user: User | null) {
+  if (!user) {
+    Sentry.setUser(null);
+    return;
+  }
+  Sentry.setUser({ id: user.id, email: user.email, username: user.name });
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -112,6 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         setNeedsSetup(session.needsSetup);
         setUser(session.user);
+        syncSentryUser(session.user);
         if (session.user) {
           const snapshot = await api<Database>("/api/data");
           if (!cancelled) {
@@ -121,6 +131,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } catch {
         if (!cancelled) {
           setUser(null);
+          syncSentryUser(null);
           setDb(EMPTY_DB);
         }
       } finally {
@@ -141,6 +152,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password }),
     });
     setUser(result.user);
+    syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
     await refreshData(result.user);
@@ -153,6 +165,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ name, email, password }),
     });
     setUser(result.user);
+    syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
     await refreshData(result.user);
@@ -162,6 +175,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" });
     setUser(null);
+    syncSentryUser(null);
     setCompany(null);
     setDb(EMPTY_DB);
   }, []);
@@ -254,6 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ token, name, password }),
       });
       setUser(result.user);
+      syncSentryUser(result.user);
       setCompany(null);
       await refreshData(result.user);
       return result.user;
