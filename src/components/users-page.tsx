@@ -376,8 +376,8 @@ export function UsersPage({
                   })}
                 </div>
                 {role === "solicitante" ? (
-                  <p className="field-hint-error">
-                    O perfil Solicitante requer pelo menos uma empresa selecionada.
+                  <p className={error.includes("empresa") ? "field-hint-error" : "signup-field-hint"}>
+                    O perfil Solicitante precisa de pelo menos uma empresa marcada.
                   </p>
                 ) : null}
               </div>
