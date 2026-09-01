@@ -33,6 +33,7 @@ import type {
   User,
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
+import { fileToStored } from "@/lib/files";
 
 const STEPS = [
   { title: "Dados básicos", caption: "Sobre a despesa" },
@@ -43,16 +44,6 @@ const STEPS = [
 
 const TYPES: ExpenseType[] = ["fornecedor", "reembolso", "adiantamento", "impostos", "outros"];
 const METHODS: PaymentMethod[] = ["pix", "ted", "boleto"];
-
-async function fileToStored(file: File): Promise<StoredFile> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Falha ao ler arquivo."));
-    reader.readAsDataURL(file);
-  });
-  return { name: file.name, size: file.size, type: file.type, dataUrl };
-}
 
 export function ExpenseForm({
   company,
@@ -66,13 +57,15 @@ export function ExpenseForm({
   user: User;
   categories: Category[];
   greetingPhrase: string;
-  onCreated: (input: Omit<Expense, "id" | "created" | "updated">) => void;
+  onCreated: (input: Omit<Expense, "id" | "created" | "updated">) => void | Promise<void>;
   onCancel: () => void;
 }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [receiptStored, setReceiptStored] = useState<StoredFile | null>(null);
+  const [preparingFile, setPreparingFile] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -130,23 +123,29 @@ export function ExpenseForm({
               (form.payment_method !== "ted" || (form.bank_name && form.agency && form.account)),
           )
         : step === 2
-          ? Boolean(receipt || form.receipt_justification.trim().length >= 15)
-          : confirmed;
+          ? Boolean((receiptStored || form.receipt_justification.trim().length >= 15) && !preparingFile)
+          : !preparingFile;
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function handleFile(file: File | null) {
+  async function handleFile(file: File | null) {
     if (!file) {
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("O arquivo deve ter no máximo 10 MB.");
-      return;
-    }
-    setReceipt(file);
+    setPreparingFile(true);
     setError("");
+    setReceipt(file);
+    try {
+      setReceiptStored(await fileToStored(file));
+    } catch (caught) {
+      setReceipt(null);
+      setReceiptStored(null);
+      setError(caught instanceof Error ? caught.message : "Não foi possível ler o arquivo.");
+    } finally {
+      setPreparingFile(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -157,11 +156,18 @@ export function ExpenseForm({
       }
       return;
     }
+    if (!confirmed) {
+      setError("Confirme que os dados estão corretos para enviar a solicitação.");
+      return;
+    }
+    if (preparingFile) {
+      setError("Aguarde a nota fiscal terminar de carregar.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      const stored = receipt ? await fileToStored(receipt) : null;
-      onCreated({
+      await onCreated({
         title: form.title,
         description: form.description,
         expense_type: form.expense_type,
@@ -178,7 +184,7 @@ export function ExpenseForm({
         boleto_code: form.boleto_code,
         max_payment_date: form.max_payment_date,
         receipt_justification: form.receipt_justification,
-        receipt: stored,
+        receipt: receiptStored,
         payment_proof: null,
         company: company.id,
         requester: user.id,
@@ -477,14 +483,29 @@ export function ExpenseForm({
               accept="image/jpeg,image/png,image/webp,application/pdf"
               onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
             />
-            {receipt ? (
+            {preparingFile ? (
+              <div className="selected-file">
+                <span className="spinner" />
+                <span>
+                  <strong>Preparando arquivo…</strong>
+                  <small>Compactando para o envio ficar leve</small>
+                </span>
+              </div>
+            ) : receipt ? (
               <div className="selected-file">
                 <FileText size={18} />
                 <span>
                   <strong>{receipt.name}</strong>
                   <small>{(receipt.size / 1024).toFixed(0)} KB</small>
                 </span>
-                <button type="button" onClick={() => setReceipt(null)} aria-label="Remover arquivo">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReceipt(null);
+                    setReceiptStored(null);
+                  }}
+                  aria-label="Remover arquivo"
+                >
                   <X size={16} />
                 </button>
               </div>
@@ -540,7 +561,7 @@ export function ExpenseForm({
                 <span>{receipt ? "Arquivo anexado" : form.receipt_justification.slice(0, 40)}</span>
               </div>
             </div>
-            <label className="confirmation-box" style={{ alignItems: "flex-start" }}>
+            <label className={cls("confirmation-box", error.includes("Confirme") && "needs-confirm")}>
               <input
                 type="checkbox"
                 checked={confirmed}
@@ -569,8 +590,14 @@ export function ExpenseForm({
                 Cancelar
               </button>
             )}
-            <button className="primary-button" disabled={!canContinue || submitting}>
-              {submitting ? <span className="spinner" /> : step < 3 ? "Continuar" : "Enviar solicitação "}
+            <button className="primary-button" type="submit" disabled={!canContinue || submitting}>
+              {submitting ? (
+                <span className="spinner" />
+              ) : step < 3 ? (
+                preparingFile ? "Preparando arquivo…" : "Continuar"
+              ) : (
+                "Enviar solicitação"
+              )}
             </button>
           </div>
         </div>
