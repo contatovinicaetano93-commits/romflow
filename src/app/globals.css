@@ -32,18 +32,27 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   overscroll-behavior: contain;
-  padding-right: 2px;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #a1a1aa #18181b;
 }
 
 .side-nav::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+}
+
+.side-nav::-webkit-scrollbar-track,
+.sidebar::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 999px;
 }
 
 .side-nav::-webkit-scrollbar-thumb,
 .sidebar::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: #71717a;
   border-radius: 999px;
 }
