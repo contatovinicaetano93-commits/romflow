@@ -1,16 +1,14 @@
 # ROM FLOW
 
-Clone do fluxo de despesas corporativo do Grupo ROM (`romflow.goskip.app`): solicitações, aprovações, pagamentos, governança e auditoria em um único fluxo.
+Fluxo de despesas corporativo do Grupo ROM: solicitações, aprovações, pagamentos, governança e auditoria.
 
-## Demonstração
+Empresas do grupo:
 
-Acesse com qualquer um destes usuários (senha `demo`):
-
-- **Administrador:** `adm@romconcept.com.br`
-- **Financeiro:** `financeiro@romconcept.com.br`
-- **Solicitante:** `ana@romconcept.com.br`
-
-Há também um convite de demonstração em `/convite?token=convite-demo-joao`.
+- Baru Bistro Brasil
+- Baru Bistro Iguatemi
+- Rom Academy
+- Rom Concept Brasil
+- Rom Concept Iguatemi
 
 ## Scripts
 

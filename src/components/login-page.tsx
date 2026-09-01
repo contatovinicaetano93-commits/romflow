@@ -10,8 +10,8 @@ export function LoginPage({
   onLogin: (email: string, password: string) => Promise<void>;
   banner?: string;
 }) {
-  const [email, setEmail] = useState("adm@romconcept.com.br");
-  const [password, setPassword] = useState("demo");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

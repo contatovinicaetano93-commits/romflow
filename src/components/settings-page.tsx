@@ -55,7 +55,7 @@ export function SettingsPage({
             </div>
             <div>
               <h3>Empresas do Grupo ROM</h3>
-              <p>{companies.length} unidades ativas no fluxo</p>
+              <p>{companies.length} unidades cadastradas</p>
             </div>
             <button type="button" onClick={() => setModal("company")}>
               <Plus size={13} /> Nova
@@ -83,7 +83,7 @@ export function SettingsPage({
             </div>
             <div>
               <h3>Categorias de despesas</h3>
-              <p>Disponível nos formulários</p>
+              <p>{categories.filter((item) => item.is_active).length} categorias disponíveis</p>
             </div>
             <button type="button" onClick={() => setModal("category")}>
               <Plus size={13} /> Nova
@@ -95,7 +95,7 @@ export function SettingsPage({
                 <i className="category-dot" style={{ background: category.color }} />
                 <span>
                   <strong>{category.name}</strong>
-                  <small>{category.color}</small>
+                  <small>Disponível nos formulários</small>
                 </span>
                 <button
                   type="button"
