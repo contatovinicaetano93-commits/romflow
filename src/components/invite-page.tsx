@@ -150,7 +150,7 @@ export function InvitePage({
       <section className="login-form-wrap">
         {loading ? (
           <div className="login-form">
-            <span className="secure-label">Validando convite</span>
+            <span className="secure-label">Validando cadastro</span>
             <h2>Estamos conferindo seu acesso.</h2>
           </div>
         ) : error && !invite ? (
@@ -170,8 +170,8 @@ export function InvitePage({
             <span className="secure-label">
               <Lock size={14} /> ACESSO SEGURO
             </span>
-            <h2>Aceitar Convite</h2>
-            <p>Você foi convidado para acessar o ROM Flow. Crie sua senha de acesso.</p>
+            <h2>Finalize seu cadastro</h2>
+            <p>Seu acesso já foi criado. Informe seu nome e defina a senha para entrar no ROM Flow.</p>
             <label>
               E-mail corporativo
               <div className="input-with-icon" style={{ opacity: 0.85, background: "rgba(255,255,255,0.03)" }}>

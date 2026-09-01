@@ -1,9 +1,13 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Copy, Mail, Search, Shield, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Link2, Mail, Search, Shield, UserPlus, Users } from "lucide-react";
 import { ROLE_CLASS, ROLE_LABEL, cls, formatDate } from "@/lib/format";
 import type { Company, Invitation, Role, User } from "@/lib/types";
+
+function signupUrl(token: string) {
+  return `${window.location.origin}/convite?token=${token}`;
+}
 
 export function UsersPage({
   users,
@@ -28,8 +32,14 @@ export function UsersPage({
   const [role, setRole] = useState<Role>("solicitante");
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [copied, setCopied] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [created, setCreated] = useState<{ email: string; link: string } | null>(null);
+
+  const pendingInvites = useMemo(
+    () => invitations.filter((item) => !item.accepted),
+    [invitations],
+  );
 
   const filtered = useMemo(
     () =>
@@ -39,31 +49,42 @@ export function UsersPage({
     [query, users],
   );
 
-  async function handleInvite(event: FormEvent) {
+  function closeModal() {
+    setOpen(false);
+    setEmail("");
+    setSelected([]);
+    setError("");
+    setCreated(null);
+    setSubmitting(false);
+    setRole("solicitante");
+  }
+
+  async function copyLink(link: string, id: string) {
+    await navigator.clipboard.writeText(link);
+    setCopied(id);
+  }
+
+  async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError("");
-    setSuccess("");
     if (role === "solicitante" && selected.length === 0) {
       setError("Selecione ao menos uma empresa para o Solicitante.");
       return;
     }
+    setSubmitting(true);
     try {
       const invitation = await onInvite(
         email,
         role,
         role === "solicitante" || selected.length > 0 ? selected : companies.map((item) => item.id),
       );
-      const link = `${window.location.origin}/convite?token=${invitation.token}`;
-      setSuccess(
-        invitation.emailSent
-          ? `Convite enviado por e-mail para ${email}.`
-          : `Convite criado para ${email}. O e-mail ainda não saiu${invitation.emailError ? ` (${invitation.emailError})` : ""}. Link: ${link}`,
-      );
-      setEmail("");
-      setSelected([]);
-      setOpen(false);
+      const link = signupUrl(invitation.token);
+      setCreated({ email: invitation.email, link });
+      await copyLink(link, "created");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível concluir a operação.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -82,13 +103,22 @@ export function UsersPage({
         <div>
           <span className="eyebrow">ACESSO E SEGURANÇA</span>
           <h2>Gestão de usuários</h2>
-          <p>Novos acessos são criados exclusivamente por convite.</p>
+          <p>
+            Crie o usuário pelo e-mail. O sistema gera um link para a pessoa finalizar o cadastro
+            com a senha dela.
+          </p>
         </div>
-        <button className="primary-button" onClick={() => setOpen(true)}>
-          <UserPlus size={16} /> Convidar novo usuário
+        <button
+          className="primary-button"
+          onClick={() => {
+            setCreated(null);
+            setError("");
+            setOpen(true);
+          }}
+        >
+          <UserPlus size={16} /> Criar usuário
         </button>
       </section>
-      {success ? <div className="success-banner">{success}</div> : null}
       {error && !open ? <div className="form-error">{error}</div> : null}
       <section className="user-kpis">
         <article>
@@ -106,10 +136,10 @@ export function UsersPage({
           </div>
         </article>
         <article>
-          <Mail size={18} />
+          <Link2 size={18} />
           <div>
-            <strong>{invitations.filter((item) => !item.accepted).length}</strong>
-            <span>Convites pendentes</span>
+            <strong>{pendingInvites.length}</strong>
+            <span>Cadastros pendentes</span>
           </div>
         </article>
       </section>
@@ -192,127 +222,177 @@ export function UsersPage({
       </section>
       <section className="panel invitation-panel">
         <header>
-          <h3>Convites recentes</h3>
+          <h3>Cadastros pendentes</h3>
         </header>
-        {invitations.length === 0 ? (
+        {pendingInvites.length === 0 ? (
           <div className="empty-state">
-            <strong>Nenhum convite</strong>
+            <strong>Nenhum cadastro pendente</strong>
+            <span>Quando você criar um usuário, o link de senha aparece aqui até a pessoa finalizar.</span>
           </div>
         ) : (
-          invitations.map((item) => (
-            <div key={item.id}>
-              <Mail size={18} />
-              <span>
-                <strong>{item.email}</strong>
-                <small>
-                  {ROLE_LABEL[item.role]} • {item.accepted ? "Aceito" : "Pendente"}
-                </small>
-              </span>
-              {!item.accepted ? (
+          pendingInvites.map((item) => {
+            const link = signupUrl(item.token);
+            return (
+              <div key={item.id}>
+                <Mail size={18} />
+                <span>
+                  <strong>{item.email}</strong>
+                  <small>
+                    {ROLE_LABEL[item.role]} • Aguardando a pessoa cadastrar a senha
+                  </small>
+                </span>
                 <button
                   className="secondary-button"
                   type="button"
-                  onClick={async () => {
-                    const url = `${window.location.origin}/convite?token=${item.token}`;
-                    await navigator.clipboard.writeText(url);
-                    setCopied(item.id);
-                  }}
+                  onClick={() => void copyLink(link, item.id)}
                 >
-                  <Copy size={14} /> {copied === item.id ? "Copiado" : "Copiar / abrir link de ativação"}
+                  {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
+                  {copied === item.id ? "Link copiado" : "Copiar link"}
                 </button>
-              ) : (
-                <em>Ativado</em>
-              )}
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </section>
 
       {open ? (
         <div className="modal-layer">
-          <button className="modal-overlay" onClick={() => setOpen(false)} />
-          <form className="action-modal" onSubmit={handleInvite}>
-            <header>
-              <div className="modal-icon emerald">
-                <UserPlus size={20} />
-              </div>
-              <div>
-                <h3>Convidar novo usuário</h3>
-                <p>O acesso será liberado por convite seguro.</p>
-              </div>
-            </header>
-            <label>
-              E-mail corporativo <span>*</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Perfil
-              <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-                <option value="solicitante">Solicitante (escopo restrito por empresa)</option>
-                <option value="financeiro">Financeiro</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </label>
-            <div className="company-selection-group">
-              <div className="company-selection-header">
-                <p className="company-selection-label">Empresas</p>
-                <div className="company-selection-actions">
-                  <button type="button" onClick={() => setSelected(companies.map((item) => item.id))}>
-                    Marcar todas
-                  </button>
-                  <span>•</span>
-                  <button type="button" onClick={() => setSelected([])}>
-                    Desmarcar
-                  </button>
+          <button className="modal-overlay" onClick={closeModal} />
+          {created ? (
+            <div className="action-modal signup-share-modal">
+              <header>
+                <div className="modal-icon emerald">
+                  <Link2 size={20} />
                 </div>
+                <div>
+                  <h3>Usuário criado</h3>
+                  <p className="modal-lead">
+                    Envie este link para {created.email}. A pessoa informa o nome e cadastra a senha.
+                  </p>
+                </div>
+              </header>
+              <div className="signup-link-box">
+                <code>{created.link}</code>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => void copyLink(created.link, "created")}
+                >
+                  {copied === "created" ? <Check size={16} /> : <Copy size={16} />}
+                  {copied === "created" ? "Link copiado" : "Copiar link"}
+                </button>
               </div>
-              <div className="company-checkbox-grid">
-                {companies.map((company) => {
-                  const checked = selected.includes(company.id);
-                  return (
-                    <label
-                      key={company.id}
-                      className={cls("company-checkbox-card", checked && "checked")}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelected((current) =>
-                            current.includes(company.id)
-                              ? current.filter((id) => id !== company.id)
-                              : [...current, company.id],
-                          )
-                        }
-                      />
-                      <i className="company-dot" style={{ background: company.color }} />
-                      <span className="company-info">
-                        <strong>{company.name}</strong>
-                        <small>{company.legal_name}</small>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              {role === "solicitante" ? (
-                <p className="field-hint-error">
-                  O perfil Solicitante requer pelo menos uma empresa selecionada.
-                </p>
-              ) : null}
+              <p className="signup-link-hint">
+                O link já foi copiado. Você pode colar no WhatsApp, e-mail ou qualquer outro canal.
+              </p>
+              <footer>
+                <button className="secondary-button" type="button" onClick={closeModal}>
+                  Fechar
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    setCreated(null);
+                    setEmail("");
+                    setSelected([]);
+                    setError("");
+                    setCopied("");
+                  }}
+                >
+                  Criar outro
+                </button>
+              </footer>
             </div>
-            {error ? <div className="form-error">{error}</div> : null}
-            <footer>
-              <button className="secondary-button" type="button" onClick={() => setOpen(false)}>
-                Cancelar
-              </button>
-              <button className="primary-button">Enviar convite</button>
-            </footer>
-          </form>
+          ) : (
+            <form className="action-modal" onSubmit={handleCreate}>
+              <header>
+                <div className="modal-icon emerald">
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h3>Criar usuário</h3>
+                  <p className="modal-lead">
+                    Informe o e-mail. Depois copie o link para a pessoa finalizar o cadastro.
+                  </p>
+                </div>
+              </header>
+              <label>
+                E-mail <span>*</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Perfil
+                <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
+                  <option value="solicitante">Solicitante (escopo restrito por empresa)</option>
+                  <option value="financeiro">Financeiro</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </label>
+              <div className="company-selection-group">
+                <div className="company-selection-header">
+                  <p className="company-selection-label">Empresas</p>
+                  <div className="company-selection-actions">
+                    <button type="button" onClick={() => setSelected(companies.map((item) => item.id))}>
+                      Marcar todas
+                    </button>
+                    <span>•</span>
+                    <button type="button" onClick={() => setSelected([])}>
+                      Desmarcar
+                    </button>
+                  </div>
+                </div>
+                <div className="company-checkbox-grid">
+                  {companies.map((company) => {
+                    const checked = selected.includes(company.id);
+                    return (
+                      <label
+                        key={company.id}
+                        className={cls("company-checkbox-card", checked && "checked")}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelected((current) =>
+                              current.includes(company.id)
+                                ? current.filter((id) => id !== company.id)
+                                : [...current, company.id],
+                            )
+                          }
+                        />
+                        <i className="company-dot" style={{ background: company.color }} />
+                        <span className="company-info">
+                          <strong>{company.name}</strong>
+                          <small>{company.legal_name}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {role === "solicitante" ? (
+                  <p className="field-hint-error">
+                    O perfil Solicitante requer pelo menos uma empresa selecionada.
+                  </p>
+                ) : null}
+              </div>
+              {error ? <div className="form-error">{error}</div> : null}
+              <footer>
+                <button className="secondary-button" type="button" onClick={closeModal}>
+                  Cancelar
+                </button>
+                <button className="primary-button" disabled={submitting}>
+                  {submitting ? <span className="spinner" /> : null}
+                  {submitting ? "Criando..." : "Criar e gerar link"}
+                </button>
+              </footer>
+            </form>
+          )}
         </div>
       ) : null}
     </div>
