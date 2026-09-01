@@ -23,6 +23,7 @@ export function ExpenseList({
   title = "Minhas solicitações",
   subtitle = "Acompanhe prazos, documentos e cada etapa até o pagamento.",
   eyebrow = "MEU FLUXO",
+  companyNames = {},
   onSearch,
   onNavigate,
   onOpen,
@@ -32,6 +33,7 @@ export function ExpenseList({
   title?: string;
   subtitle?: string;
   eyebrow?: string;
+  companyNames?: Record<string, string>;
   onSearch: (value: string) => void;
   onNavigate: (screen: Screen) => void;
   onOpen: (expense: Expense) => void;
@@ -154,7 +156,7 @@ export function ExpenseList({
                         </button>
                       </td>
                       <td>
-                        <span className="table-subline">{item.event_project || "—"}</span>
+                        <span className="table-subline">{companyNames[item.company] || "—"}</span>
                       </td>
                       <td>
                         {formatDate(item.max_payment_date)}

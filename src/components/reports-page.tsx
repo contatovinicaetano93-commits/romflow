@@ -1,8 +1,8 @@
 "use client";
 
 import { BarChart3, CheckCircle2, PieChart, Wallet } from "lucide-react";
-import { CATEGORY_COLOR, STATUS_LABEL, money } from "@/lib/format";
-import type { Expense, ExpenseStatus } from "@/lib/types";
+import { STATUS_LABEL, money } from "@/lib/format";
+import type { Category, Expense, ExpenseStatus } from "@/lib/types";
 
 const STATUS_ORDER: ExpenseStatus[] = [
   "enviada",
@@ -14,16 +14,22 @@ const STATUS_ORDER: ExpenseStatus[] = [
   "recusada",
 ];
 
-export function ReportsPage({ expenses }: { expenses: Expense[] }) {
+export function ReportsPage({
+  expenses,
+  categories: categoryOptions,
+}: {
+  expenses: Expense[];
+  categories: Category[];
+}) {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   const paid = expenses.filter((item) => item.status === "paga");
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const ticket = expenses.length ? total / expenses.length : 0;
-  const categories = Object.entries(CATEGORY_COLOR).map(([name, color]) => {
+  const categories = categoryOptions.map((item) => {
     const value = expenses
-      .filter((item) => item.category === name)
-      .reduce((sum, item) => sum + item.amount, 0);
-    return { name, color, value, pct: total ? Math.round((value / total) * 100) : 0 };
+      .filter((expense) => expense.category === item.name)
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    return { name: item.name, color: item.color, value, pct: total ? Math.round((value / total) * 100) : 0 };
   });
   const byStatus = STATUS_ORDER.map((status) => ({
     status,

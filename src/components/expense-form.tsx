@@ -24,6 +24,7 @@ import {
   parseMoneyInput,
 } from "@/lib/format";
 import type {
+  Category,
   Company,
   Expense,
   ExpenseType,
@@ -56,12 +57,14 @@ async function fileToStored(file: File): Promise<StoredFile> {
 export function ExpenseForm({
   company,
   user,
+  categories,
   greetingPhrase,
   onCreated,
   onCancel,
 }: {
   company: Company;
   user: User;
+  categories: Category[];
   greetingPhrase: string;
   onCreated: (input: Omit<Expense, "id" | "created" | "updated">) => void;
   onCancel: () => void;
@@ -73,13 +76,23 @@ export function ExpenseForm({
   const [dragging, setDragging] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const activeCategories = categories.filter((item) => item.is_active);
+  const categoryChoices =
+    activeCategories.length > 0
+      ? activeCategories
+      : Object.keys(CATEGORY_COLOR).map((name) => ({
+          id: name,
+          name,
+          color: CATEGORY_COLOR[name] ?? "#71717A",
+          is_active: true,
+        }));
   const [form, setForm] = useState(() => ({
     title: "",
     description: "",
     expense_type: "fornecedor" as ExpenseType,
     event_project: "",
     amount: "",
-    category: "Software",
+    category: categoryChoices[0]?.name ?? "Software",
     payment_method: "pix" as PaymentMethod,
     beneficiary_name: "",
     beneficiary_document: "",
@@ -290,8 +303,8 @@ export function ExpenseForm({
                   value={form.category}
                   onChange={(event) => setField("category", event.target.value)}
                 >
-                  {Object.keys(CATEGORY_COLOR).map((category) => (
-                    <option key={category}>{category}</option>
+                  {categoryChoices.map((category) => (
+                    <option key={category.id}>{category.name}</option>
                   ))}
                 </select>
               </label>

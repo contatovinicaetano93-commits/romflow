@@ -73,6 +73,10 @@ const TITLES: Record<Screen, string> = {
 
 const BOTTOM: Screen[] = ["dashboard", "expenses", "new-expense", "approvals"];
 
+export function canAccessScreen(role: Role, screen: Screen): boolean {
+  return NAV[role].some((item) => item.screen === screen);
+}
+
 export function AppShell({
   role,
   company,
@@ -269,7 +273,7 @@ export function AppShell({
         </header>
         <div className="content-area">{children}</div>
         <nav className="bottom-nav">
-          {BOTTOM.map((item) => {
+          {BOTTOM.filter((item) => items.some((entry) => entry.screen === item)).map((item) => {
             const def = NAV.admin.find((entry) => entry.screen === item) ?? NAV.solicitante[0];
             const Icon = def.icon;
             return (

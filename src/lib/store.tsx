@@ -113,7 +113,15 @@ export type FinanceAction =
   | "approve"
   | "schedule"
   | "pay"
-  | "reject";
+  | "reject"
+  | "resubmit";
+
+export type FinanceActionPayload = {
+  note?: string;
+  scheduledDate?: string;
+  proof?: StoredFile | null;
+  receipt?: StoredFile | null;
+};
 
 type StoreValue = {
   ready: boolean;
@@ -130,7 +138,7 @@ type StoreValue = {
   applyFinanceAction: (
     expenseId: string,
     action: FinanceAction,
-    payload?: { note?: string; scheduledDate?: string; proof?: StoredFile | null },
+    payload?: FinanceActionPayload,
   ) => void;
   inviteUser: (email: string, role: Role, companyIds: string[]) => Invitation;
   validateInvite: (token: string) => Invitation;
@@ -278,7 +286,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (
       expenseId: string,
       action: FinanceAction,
-      payload?: { note?: string; scheduledDate?: string; proof?: StoredFile | null },
+      payload?: FinanceActionPayload,
     ) => {
       if (!user) {
         throw new Error("Sessão expirada.");
@@ -326,6 +334,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           status = "recusada";
           audit = "REJECT_EXPENSE";
           break;
+        case "resubmit":
+          if (current.status !== "aguardando_documentacao") {
+            throw new Error("Só é possível reenviar solicitações devolvidas.");
+          }
+          if (!payload?.receipt && !current.receipt) {
+            throw new Error("Anexe o documento solicitado antes de reenviar.");
+          }
+          status = "em_analise";
+          audit = "UPDATE_EXPENSE";
+          break;
         default: {
           const exhaustive: never = action;
           throw new Error(`Ação não suportada: ${exhaustive}`);
@@ -334,10 +352,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const updated: Expense = {
         ...current,
         status,
-        approver: user.id,
+        approver: action === "resubmit" ? current.approver : user.id,
         review_note: payload?.note ?? current.review_note,
-        scheduled_date: payload?.scheduledDate ?? current.scheduled_date,
+        scheduled_date:
+          action === "schedule" ? (payload?.scheduledDate ?? current.scheduled_date) : current.scheduled_date,
         payment_proof: payload?.proof ?? current.payment_proof,
+        receipt: payload?.receipt ?? current.receipt,
         updated: new Date().toISOString(),
       };
       persist(

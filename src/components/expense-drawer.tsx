@@ -26,7 +26,7 @@ import {
 } from "@/lib/format";
 import type { Expense, ExpenseStatus, Role, StoredFile, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import type { FinanceAction } from "@/lib/store";
+import type { FinanceAction, FinanceActionPayload } from "@/lib/store";
 import { StatusBadge } from "./status-badge";
 
 const FLOW: ExpenseStatus[] = [
@@ -61,10 +61,7 @@ export function ExpenseDrawer({
   companyName: string;
   role: Role;
   onClose: () => void;
-  onAction: (
-    action: FinanceAction,
-    payload?: { note?: string; scheduledDate?: string; proof?: StoredFile | null },
-  ) => void;
+  onAction: (action: FinanceAction, payload?: FinanceActionPayload) => void;
 }) {
   const [modal, setModal] = useState<FinanceAction | null>(null);
   const [note, setNote] = useState("");
@@ -93,7 +90,20 @@ export function ExpenseDrawer({
     setError("");
     try {
       const stored = proof ? await fileToStored(proof) : null;
-      onAction(modal, { note, scheduledDate, proof: stored });
+      const payload: FinanceActionPayload = {};
+      if (modal === "reject" || modal === "docs") {
+        payload.note = note;
+      }
+      if (modal === "schedule") {
+        payload.scheduledDate = scheduledDate;
+      }
+      if (modal === "pay") {
+        payload.proof = stored;
+      }
+      if (modal === "resubmit") {
+        payload.receipt = stored;
+      }
+      onAction(modal, payload);
       setModal(null);
       setNote("");
       setProof(null);
@@ -118,6 +128,8 @@ export function ExpenseDrawer({
         return "Confirmar Pagamento & Anexar Comprovante";
       case "reject":
         return "Recusar Solicitação";
+      case "resubmit":
+        return "Reenviar documentação";
       default:
         return assertNever(action);
     }
@@ -137,6 +149,8 @@ export function ExpenseDrawer({
         return "Concluir & Liberar Comprovante";
       case "reject":
         return "Confirmar Recusa";
+      case "resubmit":
+        return "Reenviar solicitação";
       default:
         return assertNever(action);
     }
@@ -164,6 +178,11 @@ export function ExpenseDrawer({
           {expense.status === "recusada" ? (
             <div className="details-alert error">Solicitação Recusada</div>
           ) : null}
+          {expense.status === "aguardando_documentacao" ? (
+            <div className="details-alert">
+              {expense.review_note || "Devolvido para ajustes. Anexe os documentos e reenvie."}
+            </div>
+          ) : null}
           <div className="details-hero">
             <div className="hero-top-row">
               <StatusBadge status={expense.status} />
@@ -172,8 +191,7 @@ export function ExpenseDrawer({
             <strong>{money(expense.amount)}</strong>
             {expense.scheduled_date ? (
               <span className="hero-scheduled-badge">
-                <CalendarDays size={14} /> Agendado para{" "}
-                {new Date(`${expense.scheduled_date}T12:00:00.000Z`).toLocaleDateString("pt-BR")}
+                <CalendarDays size={14} /> Agendado para {formatDate(expense.scheduled_date)}
               </span>
             ) : null}
           </div>
@@ -187,7 +205,7 @@ export function ExpenseDrawer({
               <div className="finance-action-buttons">
                 <button
                   className="action-pill-btn review"
-                  disabled={expense.status !== "enviada"}
+                  disabled={!["enviada", "aguardando_documentacao"].includes(expense.status)}
                   onClick={() => setModal("review")}
                 >
                   <Clock3 size={16} /> Em análise
@@ -201,7 +219,7 @@ export function ExpenseDrawer({
                 </button>
                 <button
                   className="action-pill-btn approve"
-                  disabled={!["enviada", "em_analise"].includes(expense.status)}
+                  disabled={!["enviada", "em_analise", "aguardando_documentacao"].includes(expense.status)}
                   onClick={() => setModal("approve")}
                 >
                   <CheckCircle2 size={16} /> Aprovar
@@ -239,6 +257,17 @@ export function ExpenseDrawer({
                   <Ban size={14} /> Recusar
                 </button>
               </div>
+            </div>
+          ) : null}
+
+          {expense.status === "aguardando_documentacao" ? (
+            <div className="finance-actions-section">
+              <div className="section-header-row">
+                <h3>Ajustar documentação</h3>
+              </div>
+              <button className="primary-button" type="button" onClick={() => setModal("resubmit")}>
+                <Upload size={16} /> Anexar e reenviar
+              </button>
             </div>
           ) : null}
 
@@ -396,9 +425,11 @@ export function ExpenseDrawer({
                                 : "Concluída"}
                     </strong>
                     <small>
-                      {status === "paga" && expense.status === "paga"
-                        ? "Pagamento efetuado com comprovante"
-                        : EXPENSE_TYPE_LABEL[expense.expense_type]}
+                      {status === "aguardando_documentacao" && expense.review_note
+                        ? expense.review_note
+                        : status === "paga" && expense.status === "paga"
+                          ? "Pagamento efetuado com comprovante"
+                          : EXPENSE_TYPE_LABEL[expense.expense_type]}
                     </small>
                   </div>
                 </div>
@@ -413,7 +444,9 @@ export function ExpenseDrawer({
           <button className="modal-overlay" onClick={() => setModal(null)} aria-label="Fechar modal" />
           <form className="action-modal premium-modal" onSubmit={confirm}>
             <header>
-              <div className={`modal-icon ${modal === "reject" ? "red" : modal === "docs" ? "amber" : "emerald"}`}>
+              <div
+                className={`modal-icon ${modal === "reject" ? "red" : modal === "docs" || modal === "resubmit" ? "amber" : "emerald"}`}
+              >
                 {modal === "reject" ? <Ban size={20} /> : <CheckCircle2 size={20} />}
               </div>
               <div>
@@ -441,7 +474,7 @@ export function ExpenseDrawer({
                 />
               </label>
             ) : null}
-            {modal === "pay" ? (
+            {modal === "pay" || modal === "resubmit" ? (
               <label
                 className="payment-upload"
                 onClick={() => fileRef.current?.click()}
@@ -454,9 +487,16 @@ export function ExpenseDrawer({
                   onChange={(event) => setProof(event.target.files?.[0] || null)}
                 />
                 <Upload size={22} />
-                <strong>{proof?.name || "Anexar comprovante final"}</strong>
-                <span>Arquivo oficial que será liberado para o solicitante</span>
-                <small>PDF ou imagem • obrigatório</small>
+                <strong>
+                  {proof?.name ||
+                    (modal === "pay" ? "Anexar comprovante final" : "Anexar documento solicitado")}
+                </strong>
+                <span>
+                  {modal === "pay"
+                    ? "Arquivo oficial que será liberado para o solicitante"
+                    : "Nota fiscal ou documento pedido pelo financeiro"}
+                </span>
+                <small>PDF ou imagem {modal === "pay" || !expense.receipt ? "• obrigatório" : ""}</small>
               </label>
             ) : null}
             {error ? <div className="form-error">{error}</div> : null}
@@ -469,7 +509,8 @@ export function ExpenseDrawer({
                 disabled={
                   busy ||
                   ((modal === "reject" || modal === "docs") && note.length < 10) ||
-                  (modal === "pay" && !proof)
+                  (modal === "pay" && !proof) ||
+                  (modal === "resubmit" && !proof && !expense.receipt)
                 }
               >
                 {busy ? <span className="spinner" /> : confirmLabel(modal)}

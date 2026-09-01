@@ -2,8 +2,8 @@
 
 import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Sparkles, Wallet } from "lucide-react";
 import { useState } from "react";
-import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/format";
-import type { Company, Expense, Role, Screen, User } from "@/lib/types";
+import { CATEGORY_COLOR, KINDNESS_PHRASES, money, parseDate } from "@/lib/format";
+import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
 import { StatusBadge } from "./status-badge";
 
 const MONTHS = ["Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
@@ -13,6 +13,7 @@ export function Dashboard({
   company,
   user,
   expenses,
+  categories,
   onNavigate,
   onOpenExpense,
 }: {
@@ -20,6 +21,7 @@ export function Dashboard({
   company: Company;
   user: User;
   expenses: Expense[];
+  categories: Category[];
   onNavigate: (screen: Screen) => void;
   onOpenExpense: (expense: Expense) => void;
 }) {
@@ -27,23 +29,25 @@ export function Dashboard({
   const paid = expenses.filter((item) => item.status === "paga");
   const pending = expenses.filter((item) => !["paga", "recusada"].includes(item.status));
   const urgent = pending.filter(
-    (item) => new Date(item.max_payment_date).getTime() - now < 3 * 86_400_000,
+    (item) => parseDate(item.max_payment_date).getTime() - now < 3 * 86_400_000,
   );
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const pendingTotal = pending.reduce((sum, item) => sum + item.amount, 0);
   const today = new Date(now).toDateString();
   const dueToday = pending
-    .filter((item) => new Date(item.max_payment_date).toDateString() === today)
+    .filter((item) => parseDate(item.max_payment_date).toDateString() === today)
     .reduce((sum, item) => sum + item.amount, 0);
   const lastReimburse = expenses.find((item) => item.expense_type === "reembolso");
   const greeting = KINDNESS_PHRASES[new Date(now).getDate() % KINDNESS_PHRASES.length];
-  const categories = Object.entries(CATEGORY_COLOR).map(([category, color]) => ({
-    category,
-    color,
-    value: expenses.filter((item) => item.category === category).reduce((sum, item) => sum + item.amount, 0),
+  const categoryStats = (categories.length
+    ? categories.map((item) => ({ category: item.name, color: item.color }))
+    : Object.entries(CATEGORY_COLOR).map(([category, color]) => ({ category, color }))
+  ).map((item) => ({
+    ...item,
+    value: expenses.filter((expense) => expense.category === item.category).reduce((sum, expense) => sum + expense.amount, 0),
   }));
-  const maxCategory = Math.max(...categories.map((item) => item.value), 1);
+  const maxCategory = Math.max(...categoryStats.map((item) => item.value), 1);
 
   const kpis =
     role === "financeiro"
@@ -209,7 +213,7 @@ export function Dashboard({
             <button type="button">Este mês</button>
           </header>
           <div className="bar-chart">
-            {categories.map((item) => (
+            {categoryStats.map((item) => (
               <div key={item.category}>
                 <span className="bar-value">{item.value ? money(item.value) : "—"}</span>
                 <span className="bar-track">

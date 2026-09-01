@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
+import { AppShell, canAccessScreen } from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
 import { CompanySelect } from "@/components/company-select";
 import { Dashboard } from "@/components/dashboard";
@@ -46,10 +46,13 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
 
   const navigate = useCallback(
     (next: Screen) => {
+      if (store.user && !canAccessScreen(store.user.role, next)) {
+        return;
+      }
       setScreen(next);
       closePopovers();
     },
-    [closePopovers],
+    [closePopovers, store.user],
   );
 
   if (!store.ready) {
@@ -106,8 +109,21 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     );
   }
 
+  const companyNames = Object.fromEntries(store.db.companies.map((item) => [item.id, item.name]));
+  const visibleScreen = canAccessScreen(store.user.role, screen)
+    ? screen
+    : store.user.role === "solicitante"
+      ? "expenses"
+      : "dashboard";
+
   function renderScreen(current: Screen) {
-    switch (current) {
+    const role = store.user!.role;
+    const resolved = canAccessScreen(role, current)
+      ? current
+      : role === "solicitante"
+        ? "expenses"
+        : "dashboard";
+    switch (resolved) {
       case "dashboard":
         return (
           <Dashboard
@@ -115,6 +131,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             company={store.company!}
             user={store.user!}
             expenses={expenses}
+            categories={store.db.categories}
             onNavigate={navigate}
             onOpenExpense={setSelected}
           />
@@ -131,6 +148,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
                 : "Visão completa de todas as solicitações de pagamento da empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
+            companyNames={companyNames}
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
@@ -141,6 +159,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           <ExpenseList
             expenses={myExpenses}
             search={search}
+            companyNames={companyNames}
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
@@ -151,8 +170,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           <ExpenseForm
             company={store.company!}
             user={store.user!}
+            categories={store.db.categories}
             greetingPhrase={greeting}
-            onCancel={() => navigate("my-expenses")}
+            onCancel={() => navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses")}
             onCreated={(input) => {
               store.createExpense(input);
               navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses");
@@ -178,7 +198,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           />
         );
       case "reports":
-        return <ReportsPage expenses={expenses} />;
+        return <ReportsPage expenses={expenses} categories={store.db.categories} />;
       case "users":
         return (
           <UsersPage
@@ -202,7 +222,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           />
         );
       default:
-        return assertNever(current);
+        return assertNever(resolved);
     }
   }
 
@@ -212,8 +232,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         role={store.user.role}
         company={store.company}
         user={store.user}
-        expenses={expenses}
-        screen={screen}
+        expenses={store.user.role === "solicitante" ? myExpenses : expenses}
+        screen={visibleScreen}
         search={search}
         onSearch={setSearch}
         onNavigate={navigate}
@@ -238,9 +258,10 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }}
         onToggleMenu={() => setMenuOpen((value) => !value)}
       >
-        {renderScreen(screen)}
+        {renderScreen(visibleScreen)}
       </AppShell>
-      {selected ? (
+      {selected &&
+      (store.user.role !== "solicitante" || selected.requester === store.user.id) ? (
         <ExpenseDrawer
           expense={store.db.expenses.find((item) => item.id === selected.id) ?? selected}
           requester={store.findUser(selected.requester)}
