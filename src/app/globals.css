@@ -1,0 +1,16 @@
+@import "./romflow.css";
+
+:root {
+  --rom-text: #fafafa;
+  --rom-primary: #10b981;
+  --rom-muted: #a1a1aa;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+html,
+body {
+  min-height: 100%;
+}

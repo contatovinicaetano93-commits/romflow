@@ -1,0 +1,297 @@
+"use client";
+
+import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Sparkles, Wallet } from "lucide-react";
+import { useState } from "react";
+import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/format";
+import type { Company, Expense, Role, Screen, User } from "@/lib/types";
+import { StatusBadge } from "./status-badge";
+
+const MONTHS = ["Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
+
+export function Dashboard({
+  role,
+  company,
+  user,
+  expenses,
+  onNavigate,
+  onOpenExpense,
+}: {
+  role: Role;
+  company: Company;
+  user: User;
+  expenses: Expense[];
+  onNavigate: (screen: Screen) => void;
+  onOpenExpense: (expense: Expense) => void;
+}) {
+  const [now] = useState(() => Date.now());
+  const paid = expenses.filter((item) => item.status === "paga");
+  const pending = expenses.filter((item) => !["paga", "recusada"].includes(item.status));
+  const urgent = pending.filter(
+    (item) => new Date(item.max_payment_date).getTime() - now < 3 * 86_400_000,
+  );
+  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+  const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
+  const pendingTotal = pending.reduce((sum, item) => sum + item.amount, 0);
+  const today = new Date(now).toDateString();
+  const dueToday = pending
+    .filter((item) => new Date(item.max_payment_date).toDateString() === today)
+    .reduce((sum, item) => sum + item.amount, 0);
+  const lastReimburse = expenses.find((item) => item.expense_type === "reembolso");
+  const greeting = KINDNESS_PHRASES[new Date(now).getDate() % KINDNESS_PHRASES.length];
+  const categories = Object.entries(CATEGORY_COLOR).map(([category, color]) => ({
+    category,
+    color,
+    value: expenses.filter((item) => item.category === category).reduce((sum, item) => sum + item.amount, 0),
+  }));
+  const maxCategory = Math.max(...categories.map((item) => item.value), 1);
+
+  const kpis =
+    role === "financeiro"
+      ? [
+          {
+            label: "Aguardando aprovação",
+            value: money(pendingTotal),
+            foot: `${pending.length} solicitações`,
+            icon: ClipboardCheck,
+            trend: "Precisam de atenção",
+            tone: "violet",
+          },
+          {
+            label: "Para pagar hoje",
+            value: money(dueToday),
+            foot: `${urgent.length} urgentes`,
+            icon: Wallet,
+            trend: "Prazo crítico",
+            tone: "amber",
+          },
+          {
+            label: "Volume mensal",
+            value: money(total),
+            foot: `${expenses.length} solicitações`,
+            icon: LayoutDashboard,
+            trend: "+12,4% no período",
+            tone: "emerald",
+          },
+        ]
+      : role === "admin"
+        ? [
+            {
+              label: "Volume monitorado",
+              value: money(total),
+              foot: `${expenses.length} registros`,
+              icon: LayoutDashboard,
+              trend: "Todas as operações",
+              tone: "violet",
+            },
+            {
+              label: "Fluxos pendentes",
+              value: String(pending.length),
+              foot: money(pendingTotal),
+              icon: ClipboardCheck,
+              trend: `${urgent.length} urgentes`,
+              tone: "amber",
+            },
+            {
+              label: "Pagamentos concluídos",
+              value: money(paidTotal),
+              foot: `${paid.length} pagamentos`,
+              icon: CheckCircle2,
+              trend: "Governança ativa",
+              tone: "emerald",
+            },
+          ]
+        : [
+            {
+              label: "Total gasto no mês",
+              value: money(paidTotal),
+              foot: `${paid.length} pagamentos`,
+              icon: Wallet,
+              trend: "+8,2% vs. mês anterior",
+              tone: "emerald",
+            },
+            {
+              label: "Solicitações pendentes",
+              value: String(pending.length),
+              foot: `${urgent.length} com prazo próximo`,
+              icon: ClipboardCheck,
+              trend: "Precisam de atenção",
+              tone: "amber",
+            },
+            {
+              label: "Último reembolso",
+              value: lastReimburse ? money(lastReimburse.amount) : "Aguardando histórico",
+              foot: lastReimburse ? lastReimburse.title : "Nenhum reembolso pago",
+              icon: ArrowUpRight,
+              trend: lastReimburse ? "Registrado" : "Aguardando histórico",
+              tone: "violet",
+            },
+          ];
+
+  return (
+    <div className="page-stack">
+      <section className="kindness-banner fade-in">
+        <div className="kindness-content">
+          <span className="kindness-icon-pulse">
+            <Sparkles size={16} />
+          </span>
+          <div className="kindness-text">
+            <strong>{greeting}</strong>
+            <span>
+              {user.name ? `Olá, ${user.name.split(" ")[0]}! ` : ""}
+              Estamos aqui para agilizar seu pedido de pagamento.
+            </span>
+          </div>
+        </div>
+        <div className="kindness-tag">
+          <Sparkles size={13} /> ROM Flow Care
+        </div>
+      </section>
+      <section className="welcome-row">
+        <div>
+          <span className="eyebrow">
+            <Sparkles size={14} /> VISÃO CONSOLIDADA
+          </span>
+          <h2>
+            O fluxo financeiro da <span>{company.name}</span>
+          </h2>
+          <p>Acompanhe tudo o que exige sua atenção e mantenha os pagamentos em dia.</p>
+        </div>
+        {role === "solicitante" ? (
+          <button className="primary-button" onClick={() => onNavigate("new-expense")}>
+            <Plus size={18} /> Nova despesa
+          </button>
+        ) : null}
+        {role === "financeiro" ? (
+          <button className="primary-button" onClick={() => onNavigate("approvals")}>
+            <ClipboardCheck size={18} /> Ver fila de aprovação
+          </button>
+        ) : null}
+        {role === "admin" ? (
+          <div className="dashboard-header-actions">
+            <button className="secondary-button" onClick={() => onNavigate("approvals")}>
+              <ClipboardCheck size={17} /> Fila de aprovação
+            </button>
+            <button className="primary-button" onClick={() => onNavigate("new-expense")}>
+              <Plus size={18} /> Nova despesa
+            </button>
+          </div>
+        ) : null}
+      </section>
+      <section className="kpi-grid">
+        {kpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <article className={`kpi-card kpi-${kpi.tone}`} key={kpi.label}>
+              <div className="kpi-head">
+                <span>{kpi.label}</span>
+                <i>
+                  <Icon size={19} />
+                </i>
+              </div>
+              <strong>{kpi.value}</strong>
+              <div className="kpi-foot">
+                <span>{kpi.foot}</span>
+                <em>
+                  <ArrowUpRight size={13} /> {kpi.trend}
+                </em>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+      <section className="dashboard-grid">
+        <article className="panel chart-panel">
+          <header className="panel-header">
+            <div>
+              <h3>Despesas por categoria</h3>
+              <p>Distribuição do volume no período</p>
+            </div>
+            <button type="button">Este mês</button>
+          </header>
+          <div className="bar-chart">
+            {categories.map((item) => (
+              <div key={item.category}>
+                <span className="bar-value">{item.value ? money(item.value) : "—"}</span>
+                <span className="bar-track">
+                  <i
+                    style={{
+                      height: `${Math.max((item.value / maxCategory) * 100, 4)}%`,
+                      background: item.color,
+                    }}
+                  />
+                </span>
+                <strong>{item.category}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="panel trend-panel">
+          <header className="panel-header">
+            <div>
+              <h3>Tendência de gastos</h3>
+              <p>Últimos 6 meses</p>
+            </div>
+            <span className="positive-trend">+12,4%</span>
+          </header>
+          <div className="line-chart">
+            <div className="line-grid" />
+            <svg viewBox="0 0 500 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity=".28" />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M0 140 C60 150 80 110 130 118 S200 135 245 92 S330 110 372 66 S445 72 500 28 L500 180 L0 180 Z"
+                fill="url(#area)"
+              />
+              <path
+                d="M0 140 C60 150 80 110 130 118 S200 135 245 92 S330 110 372 66 S445 72 500 28"
+                fill="none"
+                stroke="#10B981"
+                strokeWidth="4"
+              />
+              <circle cx="500" cy="28" r="6" fill="#0A0A0B" stroke="#10B981" strokeWidth="4" />
+            </svg>
+            <div className="chart-labels">
+              {MONTHS.map((month) => (
+                <span key={month}>{month}</span>
+              ))}
+            </div>
+          </div>
+        </article>
+        <article className="panel activity-panel">
+          <header className="panel-header">
+            <div>
+              <h3>Atividade recente</h3>
+              <p>Atualizações do seu fluxo</p>
+            </div>
+          </header>
+          {expenses.length === 0 ? (
+            <div className="empty-state">
+              <strong>Seu fluxo ainda não possui movimentações.</strong>
+              <span>Crie a primeira solicitação para começar.</span>
+            </div>
+          ) : (
+            <div className="activity-list">
+              {expenses.slice(0, 6).map((item) => (
+                <button key={item.id} type="button" onClick={() => onOpenExpense(item)}>
+                  <span className="activity-avatar">
+                    {item.title.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.category}</small>
+                  </span>
+                  <em>{money(item.amount)}</em>
+                  <StatusBadge status={item.status} />
+                </button>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+    </div>
+  );
+}

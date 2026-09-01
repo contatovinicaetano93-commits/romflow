@@ -1,0 +1,255 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AppShell } from "@/components/app-shell";
+import { AuditPage } from "@/components/audit-page";
+import { CompanySelect } from "@/components/company-select";
+import { Dashboard } from "@/components/dashboard";
+import { ExpenseDrawer } from "@/components/expense-drawer";
+import { ExpenseForm } from "@/components/expense-form";
+import { ExpenseList } from "@/components/expense-list";
+import { FinancePage } from "@/components/finance-page";
+import { InvitePage } from "@/components/invite-page";
+import { LoginPage } from "@/components/login-page";
+import { ReportsPage } from "@/components/reports-page";
+import { SettingsPage } from "@/components/settings-page";
+import { UsersPage } from "@/components/users-page";
+import { KINDNESS_PHRASES } from "@/lib/format";
+import { useStore } from "@/lib/store";
+import type { Expense, Screen } from "@/lib/types";
+import { assertNever } from "@/lib/types";
+
+export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
+  const store = useStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = inviteToken ?? searchParams.get("token") ?? "";
+  const [screen, setScreen] = useState<Screen>("dashboard");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Expense | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [inviteMode, setInviteMode] = useState(Boolean(inviteToken || searchParams.get("token")));
+  const [loginBanner, setLoginBanner] = useState("");
+
+  const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
+  const expenses = store.companyExpenses();
+  const myExpenses = expenses.filter((item) => item.requester === store.user?.id);
+
+  const closePopovers = useCallback(() => {
+    setNotificationsOpen(false);
+    setProfileOpen(false);
+    setMenuOpen(false);
+  }, []);
+
+  const navigate = useCallback(
+    (next: Screen) => {
+      setScreen(next);
+      closePopovers();
+    },
+    [closePopovers],
+  );
+
+  if (!store.ready) {
+    return (
+      <div className="app-loading">
+        <div className="brand-mark">R</div>
+        Preparando seu fluxo...
+        <span className="spinner spin" />
+      </div>
+    );
+  }
+
+  if (inviteMode) {
+    return (
+      <InvitePage
+        token={token}
+        onValidate={store.validateInvite}
+        onAccept={(invite, name, password) => {
+          store.acceptInvite(invite, name, password);
+          setInviteMode(false);
+          router.replace("/");
+        }}
+        onGoToLogin={() => {
+          setInviteMode(false);
+          router.replace("/");
+        }}
+      />
+    );
+  }
+
+  if (!store.user) {
+    return (
+      <LoginPage
+        banner={loginBanner}
+        onLogin={async (email, password) => {
+          const session = await store.login(email, password);
+          setScreen(session.role === "solicitante" ? "expenses" : "dashboard");
+        }}
+      />
+    );
+  }
+
+  if (!store.company) {
+    return (
+      <CompanySelect
+        user={store.user}
+        companies={store.accessibleCompanies()}
+        onSelect={(id) => {
+          store.selectCompany(id);
+          setScreen(store.user?.role === "solicitante" ? "expenses" : "dashboard");
+        }}
+        onLogout={store.logout}
+      />
+    );
+  }
+
+  function renderScreen(current: Screen) {
+    switch (current) {
+      case "dashboard":
+        return (
+          <Dashboard
+            role={store.user!.role}
+            company={store.company!}
+            user={store.user!}
+            expenses={expenses}
+            onNavigate={navigate}
+            onOpenExpense={setSelected}
+          />
+        );
+      case "expenses":
+        return (
+          <ExpenseList
+            expenses={store.user!.role === "solicitante" ? myExpenses : expenses}
+            search={search}
+            title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
+            subtitle={
+              store.user!.role === "solicitante"
+                ? "Acompanhe prazos, documentos e cada etapa até o pagamento."
+                : "Visão completa de todas as solicitações de pagamento da empresa."
+            }
+            eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
+            onSearch={setSearch}
+            onNavigate={navigate}
+            onOpen={setSelected}
+          />
+        );
+      case "my-expenses":
+        return (
+          <ExpenseList
+            expenses={myExpenses}
+            search={search}
+            onSearch={setSearch}
+            onNavigate={navigate}
+            onOpen={setSelected}
+          />
+        );
+      case "new-expense":
+        return (
+          <ExpenseForm
+            company={store.company!}
+            user={store.user!}
+            greetingPhrase={greeting}
+            onCancel={() => navigate("my-expenses")}
+            onCreated={(input) => {
+              store.createExpense(input);
+              navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses");
+            }}
+          />
+        );
+      case "approvals":
+        return (
+          <FinancePage
+            mode="approvals"
+            expenses={expenses}
+            users={store.db.users}
+            onOpen={setSelected}
+          />
+        );
+      case "payments":
+        return (
+          <FinancePage
+            mode="payments"
+            expenses={expenses}
+            users={store.db.users}
+            onOpen={setSelected}
+          />
+        );
+      case "reports":
+        return <ReportsPage expenses={expenses} />;
+      case "users":
+        return (
+          <UsersPage
+            users={store.db.users}
+            invitations={store.db.invitations}
+            companies={store.db.companies}
+            onInvite={store.inviteUser}
+            onToggle={store.toggleUserStatus}
+          />
+        );
+      case "audit":
+        return <AuditPage logs={store.db.auditLogs} users={store.db.users} />;
+      case "settings":
+        return (
+          <SettingsPage
+            companies={store.db.companies}
+            categories={store.db.categories}
+            onCreateCompany={store.createCompany}
+            onCreateCategory={store.createCategory}
+            onToggleCategory={(id, is_active) => store.updateCategory(id, { is_active })}
+          />
+        );
+      default:
+        return assertNever(current);
+    }
+  }
+
+  return (
+    <>
+      <AppShell
+        role={store.user.role}
+        company={store.company}
+        user={store.user}
+        expenses={expenses}
+        screen={screen}
+        search={search}
+        onSearch={setSearch}
+        onNavigate={navigate}
+        onSwitchCompany={() => {
+          closePopovers();
+          store.switchCompany();
+        }}
+        onLogout={() => {
+          store.logout();
+          setLoginBanner("");
+        }}
+        notificationsOpen={notificationsOpen}
+        profileOpen={profileOpen}
+        menuOpen={menuOpen}
+        onToggleNotifications={() => {
+          setProfileOpen(false);
+          setNotificationsOpen((value) => !value);
+        }}
+        onToggleProfile={() => {
+          setNotificationsOpen(false);
+          setProfileOpen((value) => !value);
+        }}
+        onToggleMenu={() => setMenuOpen((value) => !value)}
+      >
+        {renderScreen(screen)}
+      </AppShell>
+      {selected ? (
+        <ExpenseDrawer
+          expense={store.db.expenses.find((item) => item.id === selected.id) ?? selected}
+          requester={store.findUser(selected.requester)}
+          companyName={store.findCompany(selected.company)?.name ?? store.company.name}
+          role={store.user.role}
+          onClose={() => setSelected(null)}
+          onAction={(action, payload) => store.applyFinanceAction(selected.id, action, payload)}
+        />
+      ) : null}
+    </>
+  );
+}
