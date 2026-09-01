@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AppShell, canAccessScreen } from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
 import { CompanySelect } from "@/components/company-select";
@@ -23,15 +23,14 @@ import { assertNever } from "@/lib/types";
 export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const store = useStore();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = inviteToken ?? searchParams.get("token") ?? "";
+  const token = inviteToken ?? "";
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Expense | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [inviteMode, setInviteMode] = useState(Boolean(inviteToken || searchParams.get("token")));
+  const [inviteMode, setInviteMode] = useState(Boolean(inviteToken));
   const [loginBanner, setLoginBanner] = useState("");
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
@@ -54,16 +53,6 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     },
     [closePopovers, store.user],
   );
-
-  if (!store.ready) {
-    return (
-      <div className="app-loading">
-        <div className="brand-mark">R</div>
-        Preparando seu fluxo...
-        <span className="spinner spin" />
-      </div>
-    );
-  }
 
   if (inviteMode) {
     return (

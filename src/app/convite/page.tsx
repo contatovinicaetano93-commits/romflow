@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { InviteRoute } from "./invite-route";
-import { StoreProvider } from "@/lib/store";
 
 function Loading() {
   return (
@@ -14,10 +13,8 @@ function Loading() {
 
 export default function InvitePageRoute() {
   return (
-    <StoreProvider>
-      <Suspense fallback={<Loading />}>
-        <InviteRoute />
-      </Suspense>
-    </StoreProvider>
+    <Suspense fallback={<Loading />}>
+      <InviteRoute />
+    </Suspense>
   );
 }

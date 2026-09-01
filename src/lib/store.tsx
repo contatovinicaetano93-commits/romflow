@@ -107,6 +107,17 @@ function persistSession(id: string | null) {
   sessionListeners.forEach((listener) => listener());
 }
 
+const SERVER_DB = SEED;
+const SERVER_SESSION: string | null = null;
+
+function getServerDb(): Database {
+  return SERVER_DB;
+}
+
+function getServerSession(): string | null {
+  return SERVER_SESSION;
+}
+
 export type FinanceAction =
   | "review"
   | "docs"
@@ -124,7 +135,6 @@ export type FinanceActionPayload = {
 };
 
 type StoreValue = {
-  ready: boolean;
   db: Database;
   user: User | null;
   company: Company | null;
@@ -154,13 +164,8 @@ type StoreValue = {
 const StoreContext = createContext<StoreValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const ready = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-  const db = useSyncExternalStore(subscribeDb, getDbSnapshot, cloneSeed);
-  const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, () => null);
+  const db = useSyncExternalStore(subscribeDb, getDbSnapshot, getServerDb);
+  const session = useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSession);
   const user = db.users.find((item) => item.id === session) ?? null;
   const [company, setCompany] = useState<Company | null>(null);
 
@@ -516,7 +521,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreValue>(
     () => ({
-      ready,
       db,
       user,
       company,
@@ -553,7 +557,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       inviteUser,
       login,
       logout,
-      ready,
       selectCompany,
       switchCompany,
       toggleUserStatus,

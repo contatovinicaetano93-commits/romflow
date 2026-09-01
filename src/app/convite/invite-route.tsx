@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { RomFlowApp } from "@/components/rom-flow-app";
+import { ClientApp } from "@/components/client-app";
 
 export function InviteRoute() {
   const params = useSearchParams();
-  return <RomFlowApp inviteToken={params.get("token") ?? ""} />;
+  return <ClientApp inviteToken={params.get("token") ?? ""} />;
 }
