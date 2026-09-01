@@ -54,13 +54,26 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     [closePopovers, store.user],
   );
 
+  if (!store.ready) {
+    return (
+      <div className="login-page">
+        <section className="login-form-wrap">
+          <div className="login-form">
+            <span className="secure-label">ROM FLOW</span>
+            <h2>Carregando o fluxo...</h2>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   if (inviteMode) {
     return (
       <InvitePage
         token={token}
         onValidate={store.validateInvite}
-        onAccept={(invite, name, password) => {
-          store.acceptInvite(invite, name, password);
+        onAccept={async (invite, name, password) => {
+          await store.acceptInvite(invite, name, password);
           setInviteMode(false);
           router.replace("/");
         }}
@@ -76,9 +89,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     return (
       <LoginPage
         banner={loginBanner}
-        needsSetup={store.db.users.length === 0}
+        needsSetup={store.needsSetup}
         onBootstrap={async (name, email, password) => {
-          store.bootstrapAdmin(name, email, password);
+          await store.bootstrapAdmin(name, email, password);
           setScreen("dashboard");
         }}
         onLogin={async (email, password) => {
@@ -167,8 +180,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             categories={store.db.categories}
             greetingPhrase={greeting}
             onCancel={() => navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses")}
-            onCreated={(input) => {
-              store.createExpense(input);
+            onCreated={async (input) => {
+              await store.createExpense(input);
               navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses");
             }}
           />
@@ -200,7 +213,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             invitations={store.db.invitations}
             companies={store.db.companies}
             onInvite={store.inviteUser}
-            onToggle={store.toggleUserStatus}
+            onToggle={async (userId) => {
+              await store.toggleUserStatus(userId);
+            }}
           />
         );
       case "audit":
@@ -235,8 +250,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           closePopovers();
           store.switchCompany();
         }}
-        onLogout={() => {
-          store.logout();
+        onLogout={async () => {
+          await store.logout();
           setLoginBanner("");
         }}
         notificationsOpen={notificationsOpen}
@@ -262,7 +277,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           companyName={store.findCompany(selected.company)?.name ?? store.company.name}
           role={store.user.role}
           onClose={() => setSelected(null)}
-          onAction={(action, payload) => store.applyFinanceAction(selected.id, action, payload)}
+          onAction={async (action, payload) => {
+            await store.applyFinanceAction(selected.id, action, payload);
+          }}
         />
       ) : null}
     </>

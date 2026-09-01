@@ -10,11 +10,20 @@ Empresas do grupo:
 - Rom Concept Brasil
 - Rom Concept Iguatemi
 
-## Scripts
+## Ambiente
+
+Copie `.env.example` para `.env.local` e preencha:
+
+- `DATABASE_URL` — Neon (pooled)
+- `DATABASE_URL_UNPOOLED` — Neon (direct, para `npm run db:push`)
+- `RESEND_API_KEY` e `RESEND_FROM` — convites por e-mail
+- `SESSION_SECRET` — cookie de sessão
+- `APP_URL` — URL pública do app (links de convite)
 
 ```bash
 npm install
+npm run db:push
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). No primeiro acesso, cadastre o administrador do grupo. Os dados ficam no `localStorage` do navegador.
+Abra [http://localhost:3000](http://localhost:3000). Acesso inicial: administrador Rodrigo.

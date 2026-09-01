@@ -15,7 +15,11 @@ export function UsersPage({
   users: User[];
   invitations: Invitation[];
   companies: Company[];
-  onInvite: (email: string, role: Role, companyIds: string[]) => Invitation;
+  onInvite: (
+    email: string,
+    role: Role,
+    companyIds: string[],
+  ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
   onToggle: (userId: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -35,7 +39,7 @@ export function UsersPage({
     [query, users],
   );
 
-  function handleInvite(event: FormEvent) {
+  async function handleInvite(event: FormEvent) {
     event.preventDefault();
     setError("");
     setSuccess("");
@@ -44,13 +48,16 @@ export function UsersPage({
       return;
     }
     try {
-      const invitation = onInvite(
+      const invitation = await onInvite(
         email,
         role,
         role === "solicitante" || selected.length > 0 ? selected : companies.map((item) => item.id),
       );
+      const link = `${window.location.origin}/convite?token=${invitation.token}`;
       setSuccess(
-        `Convite enviado para ${email}! Link de ativação: ${window.location.origin}/convite?token=${invitation.token}`,
+        invitation.emailSent
+          ? `Convite enviado por e-mail para ${email}.`
+          : `Convite criado para ${email}. O e-mail ainda não saiu${invitation.emailError ? ` (${invitation.emailError})` : ""}. Link: ${link}`,
       );
       setEmail("");
       setSelected([]);

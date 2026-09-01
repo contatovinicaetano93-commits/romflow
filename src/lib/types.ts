@@ -43,6 +43,22 @@ export type AuditAction =
   | "UPDATE_EXPENSE"
   | "DELETE_EXPENSE";
 
+export type FinanceAction =
+  | "review"
+  | "docs"
+  | "approve"
+  | "schedule"
+  | "pay"
+  | "reject"
+  | "resubmit";
+
+export type FinanceActionPayload = {
+  note?: string;
+  scheduledDate?: string;
+  proof?: StoredFile | null;
+  receipt?: StoredFile | null;
+};
+
 export type Company = {
   id: string;
   name: string;
@@ -64,7 +80,7 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: Role;
   status: UserStatus;
   companyIds: string[];

@@ -24,9 +24,16 @@ import {
   formatDateTime,
   money,
 } from "@/lib/format";
-import type { Expense, ExpenseStatus, Role, StoredFile, User } from "@/lib/types";
+import type {
+  Expense,
+  ExpenseStatus,
+  FinanceAction,
+  FinanceActionPayload,
+  Role,
+  StoredFile,
+  User,
+} from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import type { FinanceAction, FinanceActionPayload } from "@/lib/store";
 import { StatusBadge } from "./status-badge";
 
 const FLOW: ExpenseStatus[] = [
@@ -61,7 +68,7 @@ export function ExpenseDrawer({
   companyName: string;
   role: Role;
   onClose: () => void;
-  onAction: (action: FinanceAction, payload?: FinanceActionPayload) => void;
+  onAction: (action: FinanceAction, payload?: FinanceActionPayload) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<FinanceAction | null>(null);
   const [note, setNote] = useState("");
@@ -103,7 +110,7 @@ export function ExpenseDrawer({
       if (modal === "resubmit") {
         payload.receipt = stored;
       }
-      onAction(modal, payload);
+      await onAction(modal, payload);
       setModal(null);
       setNote("");
       setProof(null);

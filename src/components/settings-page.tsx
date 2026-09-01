@@ -14,22 +14,22 @@ export function SettingsPage({
 }: {
   companies: Company[];
   categories: Category[];
-  onCreateCompany: (input: { name: string; color: string }) => void;
-  onCreateCategory: (input: { name: string; color: string }) => void;
-  onToggleCategory: (id: string, is_active: boolean) => void;
+  onCreateCompany: (input: { name: string; color: string }) => void | Promise<void>;
+  onCreateCategory: (input: { name: string; color: string }) => void | Promise<void>;
+  onToggleCategory: (id: string, is_active: boolean) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<"company" | "category" | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#10B981");
   const [success, setSuccess] = useState("");
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (modal === "company") {
-      onCreateCompany({ name, color });
+      await onCreateCompany({ name, color });
       setSuccess("Empresa adicionada com sucesso.");
     } else if (modal === "category") {
-      onCreateCategory({ name, color });
+      await onCreateCategory({ name, color });
       setSuccess("Categoria adicionada com sucesso.");
     }
     setName("");

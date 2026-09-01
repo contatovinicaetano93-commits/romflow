@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff, Lock, Mail, Shield, Sparkles, UserRound } from "lucide-react";
 import type { Invitation } from "@/lib/types";
 import { ROLE_LABEL } from "@/lib/format";
@@ -21,39 +21,59 @@ export function InvitePage({
   onGoToLogin,
 }: {
   token: string;
-  onValidate: (token: string) => Invitation;
-  onAccept: (token: string, name: string, password: string) => void;
+  onValidate: (token: string) => Promise<Invitation>;
+  onAccept: (token: string, name: string, password: string) => Promise<void>;
   onGoToLogin: () => void;
 }) {
-  const resolved = useMemo(() => {
-    if (!token) {
-      return {
-        invite: null as Invitation | null,
-        error: "Token de convite não encontrado na URL. Verifique o link recebido.",
-      };
-    }
-    try {
-      return { invite: onValidate(token), error: "" };
-    } catch (caught) {
-      return {
-        invite: null,
-        error:
-          caught instanceof Error
-            ? caught.message
-            : "Convite inválido ou expirado. Solicite um novo convite ao administrador.",
-      };
-    }
-  }, [onValidate, token]);
-
-  const [name, setName] = useState(resolved.invite ? suggestedName(resolved.invite.email) : "");
+  const [invite, setInvite] = useState<Invitation | null>(null);
+  const [resolvedError, setResolvedError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const invite = resolved.invite;
-  const error = formError || resolved.error;
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!token) {
+        setResolvedError("Token de convite não encontrado na URL. Verifique o link recebido.");
+        setLoading(false);
+        return;
+      }
+      try {
+        const next = await onValidate(token);
+        if (cancelled) {
+          return;
+        }
+        setInvite(next);
+        setName(suggestedName(next.email));
+        setResolvedError("");
+      } catch (caught) {
+        if (cancelled) {
+          return;
+        }
+        setInvite(null);
+        setResolvedError(
+          caught instanceof Error
+            ? caught.message
+            : "Convite inválido ou expirado. Solicite um novo convite ao administrador.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [onValidate, token]);
+
+  const error = formError || resolvedError;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -68,7 +88,7 @@ export function InvitePage({
     setSubmitting(true);
     setFormError("");
     try {
-      onAccept(token, name, password);
+      await onAccept(token, name, password);
     } catch (caught) {
       setFormError(
         caught instanceof Error ? caught.message : "Não foi possível ativar seu acesso com este convite.",
@@ -128,7 +148,12 @@ export function InvitePage({
         </small>
       </section>
       <section className="login-form-wrap">
-        {error && !invite ? (
+        {loading ? (
+          <div className="login-form">
+            <span className="secure-label">Validando convite</span>
+            <h2>Estamos conferindo seu acesso.</h2>
+          </div>
+        ) : error && !invite ? (
           <div className="login-form">
             <span className="secure-label">Atenção</span>
             <h2>Não foi possível ativar seu acesso com este convite.</h2>
