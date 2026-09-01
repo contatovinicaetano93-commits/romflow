@@ -23,7 +23,7 @@ import type {
   User,
 } from "./types";
 
-const DB_KEY = "romflow-db-v2";
+const DB_KEY = "romflow-db-v3";
 const SESSION_KEY = "romflow-session";
 
 function uid(prefix: string): string {
@@ -139,6 +139,7 @@ type StoreValue = {
   user: User | null;
   company: Company | null;
   login: (email: string, password: string) => Promise<User>;
+  bootstrapAdmin: (name: string, email: string, password: string) => User;
   logout: () => void;
   selectCompany: (id: string) => void;
   switchCompany: () => void;
@@ -217,6 +218,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return match;
     },
     [db.users],
+  );
+
+  const bootstrapAdmin = useCallback(
+    (name: string, email: string, password: string) => {
+      if (db.users.length > 0) {
+        throw new Error("Já existe um acesso cadastrado.");
+      }
+      const created = new Date().toISOString();
+      const admin: User = {
+        id: uid("usr"),
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        role: "admin",
+        status: "active",
+        companyIds: db.companies.map((item) => item.id),
+        created,
+      };
+      persist({ ...db, users: [admin] });
+      persistSession(admin.id);
+      setCompany(null);
+      return admin;
+    },
+    [db, persist],
   );
 
   const logout = useCallback(() => {
@@ -525,6 +550,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       user,
       company,
       login,
+      bootstrapAdmin,
       logout,
       selectCompany,
       switchCompany,
@@ -546,6 +572,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       acceptInvite,
       accessibleCompanies,
       applyFinanceAction,
+      bootstrapAdmin,
       company,
       companyExpenses,
       createCategory,

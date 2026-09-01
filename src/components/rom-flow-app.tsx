@@ -76,6 +76,11 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     return (
       <LoginPage
         banner={loginBanner}
+        needsSetup={store.db.users.length === 0}
+        onBootstrap={async (name, email, password) => {
+          store.bootstrapAdmin(name, email, password);
+          setScreen("dashboard");
+        }}
         onLogin={async (email, password) => {
           const session = await store.login(email, password);
           setScreen(session.role === "solicitante" ? "expenses" : "dashboard");

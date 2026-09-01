@@ -17,4 +17,4 @@ npm install
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). Os dados ficam no `localStorage` do navegador.
+Abra [http://localhost:3000](http://localhost:3000). No primeiro acesso, cadastre o administrador do grupo. Os dados ficam no `localStorage` do navegador.
