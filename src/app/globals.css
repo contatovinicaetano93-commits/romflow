@@ -14,3 +14,36 @@ html,
 body {
   min-height: 100%;
 }
+
+.sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar .brand-row,
+.sidebar .company-chip,
+.sidebar-security,
+.sidebar-user {
+  flex-shrink: 0;
+}
+
+.side-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.side-nav::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.side-nav::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+}
