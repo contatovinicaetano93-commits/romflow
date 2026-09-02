@@ -36,6 +36,7 @@ import {
   canAccessArea,
   canSeeExpense,
   defaultAreasForRole,
+  initialStatus,
   isMaster,
   nextStatus,
   parseArea,
@@ -406,6 +407,9 @@ export async function createExpenseRecord(
   const expense: Expense = {
     ...input,
     requester: actor.id,
+    status: initialStatus(input.area),
+    payment_proof: null,
+    approver: null,
     id: uid("exp"),
     created,
     updated: created,

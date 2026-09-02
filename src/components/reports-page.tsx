@@ -23,7 +23,7 @@ export function ReportsPage({
   categories: Category[];
 }) {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
-  const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "aprovada");
+  const paid = expenses.filter((item) => Boolean(item.payment_proof));
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const ticket = expenses.length ? total / expenses.length : 0;
   const categories = categoryOptions.map((item) => {

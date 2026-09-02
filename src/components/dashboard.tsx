@@ -4,6 +4,7 @@ import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Spar
 import { useState } from "react";
 import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/format";
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
+import { newRequestScreen } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
 
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -52,9 +53,14 @@ export function Dashboard({
 }) {
   const [now] = useState(() => Date.now());
   const isEmpty = expenses.length === 0;
+  const createScreen = newRequestScreen(user);
   const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "finalizada");
   const pending = expenses.filter(
-    (item) => item.status !== "recusada" && item.status !== "cancelada" && item.status !== "finalizada",
+    (item) =>
+      item.status !== "recusada" &&
+      item.status !== "cancelada" &&
+      item.status !== "finalizada" &&
+      !item.payment_proof,
   );
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
@@ -175,7 +181,7 @@ export function Dashboard({
           <p>Acompanhe tudo o que exige sua atenção e mantenha os pagamentos em dia.</p>
         </div>
         {role === "solicitante" ? (
-          <button className="primary-button" onClick={() => onNavigate("new-financeiro")}>
+          <button className="primary-button" onClick={() => onNavigate(createScreen)}>
             <Plus size={18} /> Nova solicitação
           </button>
         ) : (
@@ -183,7 +189,7 @@ export function Dashboard({
             <button className="secondary-button" onClick={() => onNavigate("approvals")}>
               <ClipboardCheck size={17} /> Fila de aprovação
             </button>
-            <button className="primary-button" onClick={() => onNavigate("new-financeiro")}>
+            <button className="primary-button" onClick={() => onNavigate(createScreen)}>
               <Plus size={18} /> Nova solicitação
             </button>
           </div>

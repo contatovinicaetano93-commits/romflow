@@ -189,6 +189,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
             companyNames={companyNames}
+            user={store.user!}
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
@@ -200,6 +201,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             expenses={myExpenses}
             search={search}
             companyNames={companyNames}
+            user={store.user!}
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}

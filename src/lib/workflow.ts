@@ -260,6 +260,11 @@ export function homeScreen(role: Role): Screen {
   return role === "solicitante" ? "expenses" : "dashboard";
 }
 
+export function newRequestScreen(user: User): Screen {
+  const area = REQUEST_AREAS.find((item) => canAccessArea(user, item));
+  return area ? screenForNewArea(area) : homeScreen(user.role);
+}
+
 export function allowedActions(user: User, expense: Expense): RequestAction[] {
   if (!canSeeExpense(user, expense)) {
     return [];
@@ -269,8 +274,11 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
   const admin = canAdminArea(user, expense.area);
 
   if (expense.area === "manutencao" && isOwner) {
-    if (expense.status === "aberta" || expense.status === "em_andamento") {
-      actions.push("progress", "complete", "cancel");
+    if (expense.status === "aberta") {
+      actions.push("progress", "cancel");
+    }
+    if (expense.status === "em_andamento") {
+      actions.push("complete", "cancel");
     }
   }
 
