@@ -329,9 +329,9 @@ export function isAdminInbox(expense: Expense): boolean {
   switch (expense.area) {
     case "financeiro":
     case "rh":
-      return expense.status === "em_analise" || expense.status === "devolvido";
+      return expense.status === "em_analise";
     case "compras":
-      return expense.status === "em_analise" || expense.status === "devolvido" || expense.status === "em_andamento";
+      return expense.status === "em_analise" || expense.status === "em_andamento";
     case "manutencao":
       return expense.status === "aberta" || expense.status === "em_andamento";
     default:
