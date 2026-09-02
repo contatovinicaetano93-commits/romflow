@@ -16,7 +16,7 @@ Copie `.env.example` para `.env.local` e preencha:
 
 - `DATABASE_URL` — Neon (pooled)
 - `DATABASE_URL_UNPOOLED` — Neon (direct, para `npm run db:push`)
-- `RESEND_API_KEY` e `RESEND_FROM` — e-mails de convite e de movimentação (`ROM Flow <noreply@mail.romconcept.com.br>`)
+- `RESEND_API_KEY` e `RESEND_FROM` — e-mails de convite e de movimentação (`ROM Flow <noreply@romconcept.com.br>`)
 - `SESSION_SECRET` — cookie de sessão
 - `APP_URL` — URL pública do app (links de convite)
 

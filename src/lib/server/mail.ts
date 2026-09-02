@@ -27,7 +27,7 @@ export function fromAddress(): string {
   if (configured && !configured.includes("onboarding@resend.dev")) {
     return configured;
   }
-  return "ROM Flow <noreply@mail.romconcept.com.br>";
+  return "ROM Flow <noreply@romconcept.com.br>";
 }
 
 export function escapeHtml(value: string): string {
