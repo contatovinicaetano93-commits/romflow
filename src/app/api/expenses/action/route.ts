@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import {
   applyFinanceActionRecord,
   findCompanyRow,
@@ -22,16 +23,18 @@ export async function POST(request: Request) {
     }
     const expense = await applyFinanceActionRecord(user, body.expenseId, body.action, body.payload);
     const company = await findCompanyRow(expense.company);
-    try {
-      await notifyExpenseChange({
+    const companyName = company?.name ?? expense.company;
+    const action = body.action;
+    after(() =>
+      notifyExpenseChange({
         expense,
-        companyName: company?.name ?? expense.company,
+        companyName,
         actor: user,
-        action: body.action,
-      });
-    } catch {
-      // The status change must succeed even if a notification fails; the email log records it.
-    }
+        action,
+      }).catch(() => {
+        // Status already saved; email log records delivery failures.
+      }),
+    );
     return jsonOk({ expense });
   } catch (caught) {
     const message = publicError(caught);

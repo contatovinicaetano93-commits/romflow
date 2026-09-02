@@ -242,11 +242,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const applyFinanceAction = useCallback(
     async (expenseId: string, action: FinanceAction, payload?: FinanceActionPayload) => {
-      await api("/api/expenses/action", {
+      const result = await api<{ expense: Expense }>("/api/expenses/action", {
         method: "POST",
         body: JSON.stringify({ expenseId, action, payload }),
       });
-      await refreshData();
+      setDb((current) => ({
+        ...current,
+        expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
+      }));
+      try {
+        await refreshData();
+      } catch {
+        // The action already committed; keep the patched expense if the snapshot fails.
+      }
     },
     [refreshData],
   );

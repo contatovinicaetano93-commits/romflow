@@ -24,7 +24,7 @@ import {
   HeartHandshake,
   X,
 } from "lucide-react";
-import { ROLE_LABEL, cls, initials } from "@/lib/format";
+import { ROLE_LABEL, STATUS_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { canAccessArea, canManageUsers, isAdminInbox } from "@/lib/workflow";
@@ -283,7 +283,7 @@ export function AppShell({
                         <span className="activity-dot" />
                         <span>
                           <strong>{item.title}</strong>
-                          <small>{item.status}</small>
+                          <small>{STATUS_LABEL[item.status]}</small>
                         </span>
                       </button>
                     ))

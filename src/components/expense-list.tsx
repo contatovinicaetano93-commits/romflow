@@ -23,7 +23,7 @@ export function ExpenseList({
   expenses,
   search,
   title = "Minhas solicitações",
-  subtitle = "Acompanhe prazos, documentos e cada etapa até o pagamento.",
+  subtitle = "Acompanhe cada etapa das suas solicitações.",
   eyebrow = "MEU FLUXO",
   companyNames = {},
   user,
@@ -90,8 +90,8 @@ export function ExpenseList({
         <div className="summary-status">
           <i />
           <p>
-            <strong>Atualização em tempo real</strong>
-            <small>Você será avisado sobre mudanças</small>
+            <strong>Status atualizado na ação</strong>
+            <small>Aprove, devolva ou recuse pelo detalhe</small>
           </p>
         </div>
       </section>

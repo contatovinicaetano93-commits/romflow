@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { createExpenseRecord, findCompanyRow } from "@/lib/server/data";
 import { notifyExpenseChange } from "@/lib/server/notify";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
@@ -11,16 +12,17 @@ export async function POST(request: Request) {
     const input = await readJson<Omit<Expense, "id" | "created" | "updated">>(request);
     const expense = await createExpenseRecord(user, input);
     const company = await findCompanyRow(expense.company);
-    try {
-      await notifyExpenseChange({
+    const companyName = company?.name ?? expense.company;
+    after(() =>
+      notifyExpenseChange({
         expense,
-        companyName: company?.name ?? expense.company,
+        companyName,
         actor: user,
         action: "created",
-      });
-    } catch {
-      // The request must succeed even if a notification fails; the email log records it.
-    }
+      }).catch(() => {
+        // The request already created the expense; email log records delivery failures.
+      }),
+    );
     return jsonOk({ expense });
   } catch (caught) {
     const message = publicError(caught);

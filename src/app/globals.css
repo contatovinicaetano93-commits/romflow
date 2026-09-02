@@ -228,3 +228,22 @@ small {
   color: #fca5a5;
   background: #ef44441a;
 }
+
+.action-pill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.flow-modal-layer .modal-overlay {
+  z-index: 1;
+}
+
+.flow-modal-layer .action-modal {
+  z-index: 2;
+}
+
+.action-modal .modal-lead {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}

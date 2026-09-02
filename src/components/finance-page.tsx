@@ -8,9 +8,13 @@ import {
   Search,
   Wallet,
 } from "lucide-react";
-import { daysUntil, money, shortId } from "@/lib/format";
+import { AREA_LABEL, daysUntil, formatDate, money, shortId } from "@/lib/format";
 import type { Expense, User } from "@/lib/types";
+import { isAdminInbox, isWaitingPayment } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
+
+type ApprovalTab = "review" | "returned" | "approved" | "rejected";
+type PaymentTab = "waiting" | "paid";
 
 export function FinancePage({
   mode,
@@ -23,50 +27,64 @@ export function FinancePage({
   users: User[];
   onOpen: (expense: Expense) => void;
 }) {
-  const [tab, setTab] = useState<"all" | "review" | "returned" | "approved" | "rejected">("all");
+  const [approvalTab, setApprovalTab] = useState<ApprovalTab>("review");
+  const [paymentTab, setPaymentTab] = useState<PaymentTab>("waiting");
   const [query, setQuery] = useState("");
 
-  const filtered = useMemo(() => {
-    const byTab = expenses.filter((item) => {
-      switch (tab) {
-        case "all":
-          return true;
-        case "review":
-          return item.status === "em_analise" || item.status === "aberta" || item.status === "em_andamento";
-        case "returned":
-          return item.status === "devolvido";
-        case "approved":
-          return item.status === "aprovada" || item.status === "finalizada";
-        case "rejected":
-          return item.status === "recusada" || item.status === "cancelada";
+  const queue = useMemo(() => expenses.filter((item) => isAdminInbox(item)), [expenses]);
+  const returned = useMemo(() => expenses.filter((item) => item.status === "devolvido"), [expenses]);
+  const decided = useMemo(
+    () => expenses.filter((item) => item.status === "aprovada" || item.status === "finalizada"),
+    [expenses],
+  );
+  const rejected = useMemo(
+    () => expenses.filter((item) => item.status === "recusada" || item.status === "cancelada"),
+    [expenses],
+  );
+  const waitingPay = useMemo(() => expenses.filter((item) => isWaitingPayment(item)), [expenses]);
+  const paid = useMemo(() => expenses.filter((item) => Boolean(item.payment_proof)), [expenses]);
+
+  const list = useMemo(() => {
+    let source: Expense[];
+    if (mode === "payments") {
+      switch (paymentTab) {
+        case "waiting":
+          source = waitingPay;
+          break;
+        case "paid":
+          source = paid;
+          break;
         default: {
-          const exhaustive: never = tab;
+          const exhaustive: never = paymentTab;
           return exhaustive;
         }
       }
-    });
-    return byTab.filter((item) =>
-      `${item.title} ${item.beneficiary_name}`.toLowerCase().includes(query.toLowerCase()),
+    } else {
+      switch (approvalTab) {
+        case "review":
+          source = queue;
+          break;
+        case "returned":
+          source = returned;
+          break;
+        case "approved":
+          source = decided;
+          break;
+        case "rejected":
+          source = rejected;
+          break;
+        default: {
+          const exhaustive: never = approvalTab;
+          return exhaustive;
+        }
+      }
+    }
+    return source.filter((item) =>
+      `${item.title} ${item.beneficiary_name} ${AREA_LABEL[item.area]}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
     );
-  }, [expenses, query, tab]);
-
-  const inReview = expenses.filter((item) =>
-    ["em_analise", "devolvido", "aberta", "em_andamento"].includes(item.status),
-  );
-  const waitingPay = expenses.filter(
-    (item) =>
-      ["aprovada", "em_andamento", "finalizada"].includes(item.status) && !item.payment_proof,
-  );
-  const paid = expenses.filter((item) => Boolean(item.payment_proof));
-
-  const counts = {
-    review: expenses.filter((item) =>
-      ["em_analise", "aberta", "em_andamento"].includes(item.status),
-    ).length,
-    returned: expenses.filter((item) => item.status === "devolvido").length,
-    approved: expenses.filter((item) => item.status === "aprovada" || item.status === "finalizada").length,
-    rejected: expenses.filter((item) => item.status === "recusada" || item.status === "cancelada").length,
-  };
+  }, [approvalTab, decided, mode, paymentTab, paid, query, queue, rejected, returned, waitingPay]);
 
   return (
     <div className="page-stack">
@@ -76,61 +94,108 @@ export function FinancePage({
           <h2>{mode === "approvals" ? "Central de aprovação" : "Pagamentos"}</h2>
           <p>
             {mode === "approvals"
-              ? "Analise documentos e decida com rapidez e segurança."
-              : "Anexe o comprovante das solicitações de financeiro, manutenção, compras e RH."}
+              ? "Abra a solicitação, decida e o status atualiza na hora."
+              : "Anexe o recibo das solicitações já validadas."}
           </p>
         </div>
       </section>
       <section className="finance-kpis">
-        <article>
-          <div className="finance-icon violet">
-            <Clock3 size={19} />
-          </div>
-          <div>
-            <small>Na fila de análise</small>
-            <strong>{inReview.length}</strong>
-            <em>{money(inReview.reduce((sum, item) => sum + item.amount, 0))}</em>
-          </div>
-        </article>
-        <article>
-          <div className="finance-icon amber">
-            <Wallet size={19} />
-          </div>
-          <div>
-            <small>Aguardando pagamento</small>
-            <strong>{waitingPay.length}</strong>
-            <em>{money(waitingPay.reduce((sum, item) => sum + item.amount, 0))}</em>
-          </div>
-        </article>
-        <article>
-          <div className="finance-icon emerald">
-            <CheckCircle2 size={19} />
-          </div>
-          <div>
-            <small>Pagas no período</small>
-            <strong>{paid.length}</strong>
-            <em>{money(paid.reduce((sum, item) => sum + item.amount, 0))}</em>
-          </div>
-        </article>
+        {mode === "approvals" ? (
+          <>
+            <article>
+              <div className="finance-icon violet">
+                <Clock3 size={19} />
+              </div>
+              <div>
+                <small>Na fila</small>
+                <strong>{queue.length}</strong>
+                <em>precisam de decisão</em>
+              </div>
+            </article>
+            <article>
+              <div className="finance-icon amber">
+                <Wallet size={19} />
+              </div>
+              <div>
+                <small>Devolvidas</small>
+                <strong>{returned.length}</strong>
+                <em>aguardando ajuste</em>
+              </div>
+            </article>
+            <article>
+              <div className="finance-icon emerald">
+                <CheckCircle2 size={19} />
+              </div>
+              <div>
+                <small>Aprovadas</small>
+                <strong>{decided.length}</strong>
+                <em>nesta empresa</em>
+              </div>
+            </article>
+          </>
+        ) : (
+          <>
+            <article>
+              <div className="finance-icon amber">
+                <Wallet size={19} />
+              </div>
+              <div>
+                <small>Aguardando recibo</small>
+                <strong>{waitingPay.length}</strong>
+                <em>{money(waitingPay.reduce((sum, item) => sum + item.amount, 0))}</em>
+              </div>
+            </article>
+            <article>
+              <div className="finance-icon emerald">
+                <CheckCircle2 size={19} />
+              </div>
+              <div>
+                <small>Com recibo</small>
+                <strong>{paid.length}</strong>
+                <em>{money(paid.reduce((sum, item) => sum + item.amount, 0))}</em>
+              </div>
+            </article>
+            <article>
+              <div className="finance-icon violet">
+                <Clock3 size={19} />
+              </div>
+              <div>
+                <small>Na fila de análise</small>
+                <strong>{queue.length}</strong>
+                <em>ainda não validadas</em>
+              </div>
+            </article>
+          </>
+        )}
       </section>
       <section className="panel data-panel">
         <div className="finance-tabs-flow">
           <div className="finance-flow-scroll">
-            <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
-              Todas <span>{expenses.length}</span>
-            </button>
-            <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>
-              Em análise {counts.review > 0 ? <span>{counts.review}</span> : null}
-            </button>
-            <button className={tab === "returned" ? "active" : ""} onClick={() => setTab("returned")}>
-              Devolvido {counts.returned > 0 ? <span>{counts.returned}</span> : null}
-            </button>
-            <button className={tab === "approved" ? "active" : ""} onClick={() => setTab("approved")}>
-              Aprovado {counts.approved > 0 ? <span>{counts.approved}</span> : null}
-            </button>
-            <button className={tab === "rejected" ? "active" : ""} onClick={() => setTab("rejected")}>
-              Recusado {counts.rejected > 0 ? <span>{counts.rejected}</span> : null}
-            </button>
+            {mode === "approvals" ? (
+              <>
+                <button className={approvalTab === "review" ? "active" : ""} onClick={() => setApprovalTab("review")}>
+                  Na fila {queue.length > 0 ? <span>{queue.length}</span> : null}
+                </button>
+                <button className={approvalTab === "returned" ? "active" : ""} onClick={() => setApprovalTab("returned")}>
+                  Devolvido {returned.length > 0 ? <span>{returned.length}</span> : null}
+                </button>
+                <button className={approvalTab === "approved" ? "active" : ""} onClick={() => setApprovalTab("approved")}>
+                  Aprovado {decided.length > 0 ? <span>{decided.length}</span> : null}
+                </button>
+                <button className={approvalTab === "rejected" ? "active" : ""} onClick={() => setApprovalTab("rejected")}>
+                  Recusado {rejected.length > 0 ? <span>{rejected.length}</span> : null}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className={paymentTab === "waiting" ? "active" : ""} onClick={() => setPaymentTab("waiting")}>
+                  Aguardando recibo {waitingPay.length > 0 ? <span>{waitingPay.length}</span> : null}
+                </button>
+                <button className={paymentTab === "paid" ? "active" : ""} onClick={() => setPaymentTab("paid")}>
+                  Com recibo {paid.length > 0 ? <span>{paid.length}</span> : null}
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="finance-tabs">
@@ -143,22 +208,29 @@ export function FinancePage({
             />
           </label>
         </div>
-        {filtered.length === 0 ? (
+        {list.length === 0 ? (
           <div className="empty-state">
             <strong>
-              {expenses.length === 0 ? "Nenhuma solicitação neste negócio." : "Tudo em dia por aqui"}
+              {mode === "payments"
+                ? paymentTab === "waiting"
+                  ? "Nada aguardando recibo."
+                  : "Nenhum recibo anexado ainda."
+                : approvalTab === "review"
+                  ? "Fila limpa."
+                  : "Nenhuma solicitação nessa etapa."}
             </strong>
             <span>
-              {expenses.length === 0
-                ? "O fluxo começa vazio para você testar com dados reais."
-                : "Não há solicitações nessa etapa."}
+              {mode === "payments"
+                ? "Pagamentos aparecem depois da validação da área."
+                : "Novas solicitações da sua área entram aqui."}
             </span>
           </div>
         ) : (
           <div className="approval-list">
-            {filtered.map((item) => {
-              const days = daysUntil(item.max_payment_date);
+            {list.map((item) => {
               const requester = users.find((user) => user.id === item.requester);
+              const showPayDate = item.area === "financeiro";
+              const days = showPayDate ? daysUntil(item.max_payment_date) : null;
               return (
                 <article className="approval-card" key={item.id}>
                   <button className="requester-avatar" onClick={() => onOpen(item)}>
@@ -169,7 +241,7 @@ export function FinancePage({
                       <button onClick={() => onOpen(item)}>
                         <strong>{item.title}</strong>
                         <span>
-                          #{shortId(item.id)} • {item.category}
+                          #{shortId(item.id)} • {AREA_LABEL[item.area]}
                         </span>
                       </button>
                       <StatusBadge status={item.status} />
@@ -180,26 +252,46 @@ export function FinancePage({
                         <small>Solicitante</small>
                         <strong>{requester?.name || "—"}</strong>
                       </span>
-                      <span>
-                        <small>Beneficiário</small>
-                        <strong>{item.beneficiary_name}</strong>
-                      </span>
-                      <span>
-                        <small>Prazo</small>
-                        <strong>{days < 0 ? "Encerrado" : `${days} dias`}</strong>
-                      </span>
+                      {item.area === "financeiro" ? (
+                        <span>
+                          <small>Beneficiário</small>
+                          <strong>{item.beneficiary_name}</strong>
+                        </span>
+                      ) : (
+                        <span>
+                          <small>Tipo</small>
+                          <strong>{item.category}</strong>
+                        </span>
+                      )}
+                      {days !== null ? (
+                        <span>
+                          <small>Prazo</small>
+                          <strong>{days < 0 ? "Encerrado" : `${days} dias`}</strong>
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="approval-value">
-                    <small>Valor solicitado</small>
-                    <strong>{money(item.amount)}</strong>
-                    <span>
-                      <CalendarDays size={12} /> {item.max_payment_date}
-                    </span>
+                    {item.amount > 0 ? (
+                      <>
+                        <small>Valor</small>
+                        <strong>{money(item.amount)}</strong>
+                      </>
+                    ) : (
+                      <>
+                        <small>Área</small>
+                        <strong>{AREA_LABEL[item.area]}</strong>
+                      </>
+                    )}
+                    {showPayDate ? (
+                      <span>
+                        <CalendarDays size={12} /> {formatDate(item.max_payment_date)}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="approval-actions">
                     <button className="view-action" onClick={() => onOpen(item)}>
-                      Ver detalhes
+                      {mode === "approvals" && approvalTab === "review" ? "Decidir" : "Ver detalhes"}
                     </button>
                   </div>
                 </article>

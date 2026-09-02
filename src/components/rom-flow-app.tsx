@@ -184,8 +184,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
             subtitle={
               store.user!.role === "solicitante"
-                ? "Acompanhe prazos, documentos e cada etapa até o pagamento."
-                : "Visão completa de todas as solicitações de pagamento da empresa."
+                ? "Acompanhe cada etapa das suas solicitações."
+                : "Visão completa das solicitações desta empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
             companyNames={companyNames}

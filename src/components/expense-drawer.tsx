@@ -15,6 +15,7 @@ import {
   AREA_LABEL,
   EXPENSE_TYPE_LABEL,
   PAYMENT_METHOD_LABEL,
+  STATUS_LABEL,
   cls,
   formatDate,
   formatDateTime,
@@ -50,9 +51,19 @@ export function ExpenseDrawer({
   const cameraRef = useRef<HTMLInputElement>(null);
   const actions = allowedActions(user, expense);
 
+  function openModal(action: FinanceAction) {
+    if (busy) {
+      return;
+    }
+    setError("");
+    setNote("");
+    setProof(null);
+    setModal(action);
+  }
+
   async function confirm(event: FormEvent) {
     event.preventDefault();
-    if (!modal) {
+    if (!modal || busy) {
       return;
     }
     setBusy(true);
@@ -106,6 +117,70 @@ export function ExpenseDrawer({
     }
   }
 
+  function modalLead(action: FinanceAction): string {
+    switch (action) {
+      case "docs":
+        return "A solicitação volta para o solicitante ajustar. Explique o que falta.";
+      case "approve":
+        return `${expense.title} passa para ${STATUS_LABEL.aprovada}. O solicitante é avisado.`;
+      case "reject":
+        return "Explique o motivo. Essa decisão fica registrada na solicitação.";
+      case "resubmit":
+        return "Anexe o que foi pedido e reenvie para a fila da área.";
+      case "attach_proof":
+        return "O recibo fica anexado à solicitação. O status não muda.";
+      case "progress":
+        return "A solicitação passa para Em andamento.";
+      case "complete":
+        return "A solicitação será finalizada.";
+      case "cancel":
+        return "A solicitação será cancelada.";
+      default:
+        return assertNever(action);
+    }
+  }
+
+  function modalIconTone(action: FinanceAction): "emerald" | "red" | "amber" {
+    switch (action) {
+      case "reject":
+      case "cancel":
+        return "red";
+      case "docs":
+      case "attach_proof":
+        return "amber";
+      case "approve":
+      case "resubmit":
+      case "progress":
+      case "complete":
+        return "emerald";
+      default:
+        return assertNever(action);
+    }
+  }
+
+  function confirmLabel(action: FinanceAction): string {
+    switch (action) {
+      case "docs":
+        return "Devolver";
+      case "approve":
+        return "Aprovar";
+      case "reject":
+        return "Recusar";
+      case "resubmit":
+        return "Reenviar";
+      case "attach_proof":
+        return "Anexar recibo";
+      case "progress":
+        return "Em andamento";
+      case "complete":
+        return "Finalizar";
+      case "cancel":
+        return "Cancelar";
+      default:
+        return assertNever(action);
+    }
+  }
+
   return (
     <div className="drawer-layer">
       <button className="drawer-overlay" aria-label="Fechar detalhes" onClick={onClose} />
@@ -130,6 +205,9 @@ export function ExpenseDrawer({
               {expense.review_note || "Devolvido para ajustes. Anexe os documentos e reenvie."}
             </div>
           ) : null}
+          {expense.status === "aprovada" ? (
+            <div className="details-alert success">Solicitação aprovada</div>
+          ) : null}
           {expense.payment_proof ? (
             <div className="details-alert success">Recibo de pagamento anexado</div>
           ) : null}
@@ -140,7 +218,7 @@ export function ExpenseDrawer({
                 <span className="hero-date">{formatDate(expense.max_payment_date)}</span>
               ) : null}
             </div>
-            <strong>{money(expense.amount)}</strong>
+            {expense.amount > 0 ? <strong>{money(expense.amount)}</strong> : <strong>{AREA_LABEL[expense.area]}</strong>}
           </div>
 
           {actions.length > 0 ? (
@@ -150,42 +228,42 @@ export function ExpenseDrawer({
               </div>
               <div className="finance-action-buttons">
                 {actions.includes("progress") ? (
-                  <button className="action-pill-btn review" type="button" onClick={() => onAction("progress")}>
+                  <button className="action-pill-btn review" type="button" disabled={busy} onClick={() => openModal("progress")}>
                     Em andamento
                   </button>
                 ) : null}
                 {actions.includes("complete") ? (
-                  <button className="action-pill-btn approve" type="button" onClick={() => onAction("complete")}>
+                  <button className="action-pill-btn approve" type="button" disabled={busy} onClick={() => openModal("complete")}>
                     <CheckCircle2 size={16} /> Finalizar
                   </button>
                 ) : null}
                 {actions.includes("cancel") ? (
-                  <button className="action-pill-btn reject" type="button" onClick={() => onAction("cancel")}>
+                  <button className="action-pill-btn reject" type="button" disabled={busy} onClick={() => openModal("cancel")}>
                     Cancelar
                   </button>
                 ) : null}
                 {actions.includes("docs") ? (
-                  <button className="action-pill-btn return" type="button" onClick={() => { setNote(""); setModal("docs"); }}>
+                  <button className="action-pill-btn return" type="button" disabled={busy} onClick={() => openModal("docs")}>
                     <RotateCcw size={16} /> Devolver
                   </button>
                 ) : null}
                 {actions.includes("approve") ? (
-                  <button className="action-pill-btn approve" type="button" onClick={() => setModal("approve")}>
+                  <button className="action-pill-btn approve" type="button" disabled={busy} onClick={() => openModal("approve")}>
                     <CheckCircle2 size={16} /> Aprovar
                   </button>
                 ) : null}
                 {actions.includes("attach_proof") ? (
-                  <button className="action-pill-btn pay" type="button" onClick={() => setModal("attach_proof")}>
+                  <button className="action-pill-btn pay" type="button" disabled={busy} onClick={() => openModal("attach_proof")}>
                     Anexar recibo
                   </button>
                 ) : null}
                 {actions.includes("reject") ? (
-                  <button className="action-pill-btn reject" type="button" onClick={() => { setNote(""); setModal("reject"); }}>
+                  <button className="action-pill-btn reject" type="button" disabled={busy} onClick={() => openModal("reject")}>
                     <Ban size={16} /> Recusar
                   </button>
                 ) : null}
                 {actions.includes("resubmit") ? (
-                  <button className="action-pill-btn review" type="button" onClick={() => setModal("resubmit")}>
+                  <button className="action-pill-btn review" type="button" disabled={busy} onClick={() => openModal("resubmit")}>
                     Reenviar
                   </button>
                 ) : null}
@@ -246,38 +324,77 @@ export function ExpenseDrawer({
       </aside>
       {modal
         ? createPortal(
-            <div className="modal-layer">
-              <button className="drawer-overlay" aria-label="Fechar" onClick={() => setModal(null)} />
-              <form className="confirm-modal" onSubmit={confirm}>
-                <h3>{modalTitle(modal)}</h3>
+            <div className="flow-modal-layer">
+              <button
+                className="modal-overlay"
+                aria-label="Fechar"
+                type="button"
+                onClick={() => {
+                  if (!busy) {
+                    setModal(null);
+                  }
+                }}
+              />
+              <form className="action-modal" onSubmit={confirm}>
+                <header>
+                  <div className={`modal-icon ${modalIconTone(modal)}`}>
+                    {modal === "reject" || modal === "cancel" ? <Ban size={20} /> : <CheckCircle2 size={20} />}
+                  </div>
+                  <div>
+                    <h3>{modalTitle(modal)}</h3>
+                    <p className="modal-lead">{modalLead(modal)}</p>
+                  </div>
+                </header>
                 {modal === "docs" || modal === "reject" ? (
-                  <label>
-                    Justificativa
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} required />
+                  <label className="modal-field">
+                    <span>Justificativa</span>
+                    <textarea
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      required
+                      autoFocus
+                    />
                   </label>
                 ) : null}
                 {modal === "attach_proof" || modal === "resubmit" ? (
-                  <>
+                  <div className="modal-field">
                     <button type="button" className="secondary-button" onClick={() => fileRef.current?.click()}>
                       <Upload size={16} /> Anexar arquivo
                     </button>
                     <button type="button" className="secondary-button" onClick={() => cameraRef.current?.click()}>
                       Tirar foto
                     </button>
-                    <input ref={fileRef} type="file" hidden accept="image/*,application/pdf" onChange={(event) => setProof(event.target.files?.[0] ?? null)} />
-                    <input ref={cameraRef} type="file" hidden accept="image/*" capture="environment" onChange={(event) => setProof(event.target.files?.[0] ?? null)} />
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      hidden
+                      accept="image/*,application/pdf"
+                      onChange={(event) => setProof(event.target.files?.[0] ?? null)}
+                    />
+                    <input
+                      ref={cameraRef}
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(event) => setProof(event.target.files?.[0] ?? null)}
+                    />
                     {proof ? <small>{proof.name}</small> : null}
-                  </>
+                  </div>
                 ) : null}
                 {error ? <div className="form-error">{error}</div> : null}
-                <div className="form-footer">
-                  <button type="button" className="secondary-button" onClick={() => setModal(null)}>
-                    Cancelar
+                <footer>
+                  <button type="button" className="secondary-button" disabled={busy} onClick={() => setModal(null)}>
+                    Voltar
                   </button>
-                  <button className={cls("primary-button", modal === "reject" && "destructive-button")} type="submit" disabled={busy}>
-                    Confirmar
+                  <button
+                    className={cls("primary-button", (modal === "reject" || modal === "cancel") && "destructive-button")}
+                    type="submit"
+                    disabled={busy}
+                  >
+                    {busy ? "Confirmando..." : confirmLabel(modal)}
                   </button>
-                </div>
+                </footer>
               </form>
             </div>,
             document.body,
