@@ -142,9 +142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setDb(EMPTY_DB);
         }
       } finally {
-        if (!cancelled) {
-          setReady(true);
-        }
+        setReady(true);
       }
     }
     void boot();
