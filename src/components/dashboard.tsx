@@ -2,8 +2,9 @@
 
 import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Sparkles, Wallet } from "lucide-react";
 import { useState } from "react";
-import { CATEGORY_COLOR, KINDNESS_PHRASES, money, parseDate } from "@/lib/format";
+import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/format";
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
+import { newRequestScreen } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
 
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -52,19 +53,21 @@ export function Dashboard({
 }) {
   const [now] = useState(() => Date.now());
   const isEmpty = expenses.length === 0;
-  const paid = expenses.filter((item) => item.status === "paga");
-  const pending = expenses.filter((item) => !["paga", "recusada"].includes(item.status));
-  const urgent = pending.filter(
-    (item) => parseDate(item.max_payment_date).getTime() - now < 3 * 86_400_000,
+  const createScreen = newRequestScreen(user);
+  const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "finalizada");
+  const pending = expenses.filter(
+    (item) =>
+      item.status !== "recusada" &&
+      item.status !== "cancelada" &&
+      item.status !== "finalizada" &&
+      !item.payment_proof,
   );
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const pendingTotal = pending.reduce((sum, item) => sum + item.amount, 0);
-  const today = new Date(now).toDateString();
-  const dueToday = pending
-    .filter((item) => parseDate(item.max_payment_date).toDateString() === today)
-    .reduce((sum, item) => sum + item.amount, 0);
-  const lastReimburse = expenses.find((item) => item.expense_type === "reembolso");
+  const lastReimburse = expenses.find(
+    (item) => item.expense_type === "reembolso_colaborador" || item.expense_type === "reembolso_cliente",
+  );
   const greeting = KINDNESS_PHRASES[new Date(now).getDate() % KINDNESS_PHRASES.length];
   const categoryStats = (categories.length
     ? categories.map((item) => ({ category: item.name, color: item.color }))
@@ -76,86 +79,59 @@ export function Dashboard({
   const maxCategory = Math.max(...categoryStats.map((item) => item.value), 1);
 
   const kpis =
-    role === "financeiro"
+    role === "solicitante"
       ? [
           {
-            label: "Aguardando aprovação",
-            value: money(pendingTotal),
-            foot: `${pending.length} solicitações`,
-            icon: ClipboardCheck,
-            trend: "Precisam de atenção",
+            label: "Minhas solicitações",
+            value: String(expenses.length),
+            foot: `${pending.length} em aberto`,
+            icon: LayoutDashboard,
+            trend: "Seu fluxo",
             tone: "violet",
           },
           {
-            label: "Para pagar hoje",
-            value: money(dueToday),
-            foot: `${urgent.length} urgentes`,
+            label: "Volume",
+            value: money(total),
+            foot: `${expenses.length} registros`,
             icon: Wallet,
-            trend: "Prazo crítico",
-            tone: "amber",
+            trend: "No período",
+            tone: "emerald",
           },
           {
-            label: "Volume mensal",
+            label: "Último reembolso",
+            value: lastReimburse ? money(lastReimburse.amount) : "—",
+            foot: lastReimburse ? lastReimburse.title : "Nenhum reembolso",
+            icon: CheckCircle2,
+            trend: "Financeiro",
+            tone: "amber",
+          },
+        ]
+      : [
+          {
+            label: "Aguardando ação",
+            value: String(pending.length),
+            foot: money(pendingTotal),
+            icon: ClipboardCheck,
+            trend: "Fila da sua área",
+            tone: "violet",
+          },
+          {
+            label: "Volume",
             value: money(total),
             foot: `${expenses.length} solicitações`,
             icon: LayoutDashboard,
             trend: "No período",
             tone: "emerald",
           },
-        ]
-      : role === "admin"
-        ? [
-            {
-              label: "Volume monitorado",
-              value: money(total),
-              foot: `${expenses.length} registros`,
-              icon: LayoutDashboard,
-              trend: isEmpty ? "Sem movimentações" : "Todas as operações",
-              tone: "violet",
-            },
-            {
-              label: "Fluxos pendentes",
-              value: String(pending.length),
-              foot: money(pendingTotal),
-              icon: ClipboardCheck,
-              trend: `${urgent.length} urgentes`,
-              tone: "amber",
-            },
-            {
-              label: "Pagamentos concluídos",
-              value: money(paidTotal),
-              foot: `${paid.length} pagamentos`,
-              icon: CheckCircle2,
-              trend: isEmpty ? "Aguardando pagamentos" : "Governança ativa",
-              tone: "emerald",
-            },
-          ]
-        : [
-            {
-              label: "Total gasto no mês",
-              value: money(paidTotal),
-              foot: `${paid.length} pagamentos`,
-              icon: Wallet,
-              trend: "No período",
-              tone: "emerald",
-            },
-            {
-              label: "Solicitações pendentes",
-              value: String(pending.length),
-              foot: `${urgent.length} com prazo próximo`,
-              icon: ClipboardCheck,
-              trend: "Precisam de atenção",
-              tone: "amber",
-            },
-            {
-              label: "Último reembolso",
-              value: lastReimburse ? money(lastReimburse.amount) : "Aguardando histórico",
-              foot: lastReimburse ? lastReimburse.title : "Nenhum reembolso pago",
-              icon: ArrowUpRight,
-              trend: lastReimburse ? "Registrado" : "Aguardando histórico",
-              tone: "violet",
-            },
-          ];
+          {
+            label: "Com recibo",
+            value: String(paid.length),
+            foot: money(paidTotal),
+            icon: Wallet,
+            trend: "Pagamentos anexados",
+            tone: "amber",
+          },
+        ];
 
   const monthBuckets = lastSixMonthBuckets(now);
   const monthValues = monthBuckets.map((bucket) =>
@@ -205,25 +181,19 @@ export function Dashboard({
           <p>Acompanhe tudo o que exige sua atenção e mantenha os pagamentos em dia.</p>
         </div>
         {role === "solicitante" ? (
-          <button className="primary-button" onClick={() => onNavigate("new-expense")}>
-            <Plus size={18} /> Nova despesa
+          <button className="primary-button" onClick={() => onNavigate(createScreen)}>
+            <Plus size={18} /> Nova solicitação
           </button>
-        ) : null}
-        {role === "financeiro" ? (
-          <button className="primary-button" onClick={() => onNavigate("approvals")}>
-            <ClipboardCheck size={18} /> Ver fila de aprovação
-          </button>
-        ) : null}
-        {role === "admin" ? (
+        ) : (
           <div className="dashboard-header-actions">
             <button className="secondary-button" onClick={() => onNavigate("approvals")}>
               <ClipboardCheck size={17} /> Fila de aprovação
             </button>
-            <button className="primary-button" onClick={() => onNavigate("new-expense")}>
-              <Plus size={18} /> Nova despesa
+            <button className="primary-button" onClick={() => onNavigate(createScreen)}>
+              <Plus size={18} /> Nova solicitação
             </button>
           </div>
-        ) : null}
+        )}
       </section>
       <section className="kpi-grid">
         {kpis.map((kpi) => {

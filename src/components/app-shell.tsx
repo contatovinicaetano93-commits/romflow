@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeft,
   BarChart3,
   Bell,
   ChevronDown,
@@ -12,16 +13,21 @@ import {
   LogOut,
   Menu,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   Shield,
   Users,
   Wallet,
+  Wrench,
+  ShoppingCart,
+  HeartHandshake,
   X,
 } from "lucide-react";
 import { ROLE_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
+import { canAccessArea, canManageUsers, isAdminInbox } from "@/lib/workflow";
 
 type NavItem = {
   label: string;
@@ -30,51 +36,76 @@ type NavItem = {
   primary?: boolean;
 };
 
-const NAV: Record<Role, NavItem[]> = {
-  solicitante: [
-    { label: "Nova Solicitação", icon: Plus, screen: "new-expense", primary: true },
-    { label: "Minhas Solicitações", icon: FileText, screen: "expenses" },
-  ],
-  financeiro: [
-    { label: "Visão geral", icon: LayoutDashboard, screen: "dashboard" },
-    { label: "Central de aprovação", icon: ClipboardCheck, screen: "approvals" },
-    { label: "Pagamentos", icon: Wallet, screen: "payments" },
-    { label: "Nova Solicitação", icon: Plus, screen: "new-expense" },
-    { label: "Minhas Solicitações", icon: FileText, screen: "my-expenses" },
-    { label: "Todas Solicitações", icon: FileText, screen: "expenses" },
-    { label: "Relatórios", icon: BarChart3, screen: "reports" },
-  ],
-  admin: [
-    { label: "Visão geral", icon: LayoutDashboard, screen: "dashboard" },
-    { label: "Nova Solicitação", icon: Plus, screen: "new-expense", primary: true },
-    { label: "Minhas Solicitações", icon: FileText, screen: "my-expenses" },
-    { label: "Central de aprovação", icon: ClipboardCheck, screen: "approvals" },
-    { label: "Pagamentos", icon: Wallet, screen: "payments" },
-    { label: "Todas Solicitações", icon: FileText, screen: "expenses" },
-    { label: "Relatórios", icon: BarChart3, screen: "reports" },
-    { label: "Gestão de usuários", icon: Users, screen: "users" },
-    { label: "Log de auditoria", icon: Shield, screen: "audit" },
-    { label: "Configurações", icon: Settings, screen: "settings" },
-  ],
-};
+export function navItemsFor(user: User): NavItem[] {
+  if (user.role === "solicitante") {
+    const items: NavItem[] = [];
+    if (canAccessArea(user, "financeiro")) {
+      items.push({ label: "Solicitação financeiro", icon: Plus, screen: "new-financeiro", primary: true });
+    }
+    if (canAccessArea(user, "manutencao")) {
+      items.push({ label: "Solicitação manutenção", icon: Wrench, screen: "new-manutencao" });
+    }
+    if (canAccessArea(user, "compras")) {
+      items.push({ label: "Solicitação compras", icon: ShoppingCart, screen: "new-compras" });
+    }
+    if (canAccessArea(user, "rh")) {
+      items.push({ label: "Solicitação RH", icon: HeartHandshake, screen: "new-rh" });
+    }
+    items.push({ label: "Minhas Solicitações", icon: FileText, screen: "expenses" });
+    return items;
+  }
+
+  const items: NavItem[] = [{ label: "Visão geral", icon: LayoutDashboard, screen: "dashboard" }];
+  if (canAccessArea(user, "financeiro")) {
+    items.push({ label: "Solicitação financeiro", icon: Plus, screen: "new-financeiro" });
+  }
+  if (canAccessArea(user, "manutencao")) {
+    items.push({ label: "Solicitação manutenção", icon: Wrench, screen: "new-manutencao" });
+  }
+  if (canAccessArea(user, "compras")) {
+    items.push({ label: "Solicitação compras", icon: ShoppingCart, screen: "new-compras" });
+  }
+  if (canAccessArea(user, "rh")) {
+    items.push({ label: "Solicitação RH", icon: HeartHandshake, screen: "new-rh" });
+  }
+  items.push({ label: "Minhas Solicitações", icon: FileText, screen: "my-expenses" });
+  items.push({ label: "Central de aprovação", icon: ClipboardCheck, screen: "approvals" });
+  if (
+    canAccessArea(user, "financeiro") ||
+    canAccessArea(user, "manutencao") ||
+    canAccessArea(user, "compras") ||
+    canAccessArea(user, "rh")
+  ) {
+    items.push({ label: "Pagamentos", icon: Wallet, screen: "payments" });
+  }
+  items.push({ label: "Todas Solicitações", icon: FileText, screen: "expenses" });
+  items.push({ label: "Relatórios", icon: BarChart3, screen: "reports" });
+  if (canManageUsers(user.role)) {
+    items.push({ label: "Gestão de usuários", icon: Users, screen: "users" });
+    items.push({ label: "Log de auditoria", icon: Shield, screen: "audit" });
+    items.push({ label: "Configurações", icon: Settings, screen: "settings" });
+  }
+  return items;
+}
 
 const TITLES: Record<Screen, string> = {
   dashboard: "Visão geral",
   expenses: "Todas as solicitações",
   "my-expenses": "Minhas solicitações",
-  "new-expense": "Pedido de Pagamento",
+  "new-financeiro": "Solicitação financeiro",
+  "new-manutencao": "Solicitação manutenção",
+  "new-compras": "Solicitação compras",
+  "new-rh": "Solicitação RH",
   approvals: "Central de aprovação",
   payments: "Pagamentos",
-  reports: "Relatórios financeiros",
+  reports: "Relatórios",
   users: "Gestão de usuários",
   audit: "Log de auditoria",
   settings: "Configurações",
 };
 
-const BOTTOM: Screen[] = ["dashboard", "expenses", "new-expense", "approvals"];
-
-export function canAccessScreen(role: Role, screen: Screen): boolean {
-  return NAV[role].some((item) => item.screen === screen);
+export function canAccessScreen(user: User, screen: Screen): boolean {
+  return navItemsFor(user).some((item) => item.screen === screen);
 }
 
 export function AppShell({
@@ -88,6 +119,8 @@ export function AppShell({
   onNavigate,
   onSwitchCompany,
   onLogout,
+  onBack,
+  onReload,
   notificationsOpen,
   profileOpen,
   menuOpen,
@@ -106,6 +139,8 @@ export function AppShell({
   onNavigate: (screen: Screen) => void;
   onSwitchCompany: () => void;
   onLogout: () => void;
+  onBack: () => void;
+  onReload: () => void;
   notificationsOpen: boolean;
   profileOpen: boolean;
   menuOpen: boolean;
@@ -114,18 +149,19 @@ export function AppShell({
   onToggleMenu: () => void;
   children: ReactNode;
 }) {
-  const items = NAV[role];
+  const items = navItemsFor(user);
   const recent = expenses.slice(0, 4);
-  const pendingCount = expenses.filter((item) =>
-    ["enviada", "em_analise", "aguardando_documentacao"].includes(item.status),
-  ).length;
+  const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
 
   function titleFor(current: Screen): string {
     switch (current) {
       case "dashboard":
       case "expenses":
       case "my-expenses":
-      case "new-expense":
+      case "new-financeiro":
+      case "new-manutencao":
+      case "new-compras":
+      case "new-rh":
       case "approvals":
       case "payments":
       case "reports":
@@ -148,7 +184,7 @@ export function AppShell({
           <div className="brand-mark">R</div>
           <div>
             <strong>ROM FLOW</strong>
-            <span>Gestão financeira</span>
+            <span>Gestão de solicitações</span>
           </div>
           <button className="icon-button sidebar-close" onClick={onToggleMenu} aria-label="Fechar menu">
             <X size={18} />
@@ -193,7 +229,7 @@ export function AppShell({
           <div className="avatar-fallback">{initials(user.name)}</div>
           <div>
             <strong>{user.name}</strong>
-            <span>{user.email}</span>
+            <small>{ROLE_LABEL[role]}</small>
           </div>
         </div>
       </aside>
@@ -202,6 +238,12 @@ export function AppShell({
           <div className="header-title">
             <button className="icon-button mobile-menu" onClick={onToggleMenu} aria-label="Abrir menu">
               <Menu size={18} />
+            </button>
+            <button className="icon-button" onClick={onBack} aria-label="Voltar">
+              <ArrowLeft size={18} />
+            </button>
+            <button className="icon-button" onClick={onReload} aria-label="Atualizar página">
+              <RefreshCw size={18} />
             </button>
             <div>
               <span>ROM Flow</span>
@@ -272,22 +314,6 @@ export function AppShell({
           </div>
         </header>
         <div className="content-area">{children}</div>
-        <nav className="bottom-nav">
-          {BOTTOM.filter((item) => items.some((entry) => entry.screen === item)).map((item) => {
-            const def = NAV.admin.find((entry) => entry.screen === item) ?? NAV.solicitante[0];
-            const Icon = def.icon;
-            return (
-              <button
-                key={item}
-                className={cls(screen === item && "active")}
-                onClick={() => onNavigate(item)}
-              >
-                <Icon size={16} />
-                {TITLES[item]}
-              </button>
-            );
-          })}
-        </nav>
       </div>
     </div>
   );

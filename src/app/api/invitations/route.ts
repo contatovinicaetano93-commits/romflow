@@ -2,17 +2,28 @@ import { createInvitationRecord, updateInvitationAccessRecord } from "@/lib/serv
 import { sendInviteEmail } from "@/lib/server/mail";
 import { ensureSeeded, requireAdmin } from "@/lib/server/session";
 import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
-import type { Role } from "@/lib/types";
+import type { RequestArea, Role } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
     await ensureSeeded();
     const user = await requireAdmin();
-    const body = await readJson<{ email?: string; role?: Role; companyIds?: string[] }>(request);
+    const body = await readJson<{
+      email?: string;
+      role?: Role;
+      companyIds?: string[];
+      areaIds?: RequestArea[];
+    }>(request);
     if (!body.email || !body.role) {
       return jsonError("Informe e-mail e perfil.");
     }
-    const invitation = await createInvitationRecord(user, body.email, body.role, body.companyIds ?? []);
+    const invitation = await createInvitationRecord(
+      user,
+      body.email,
+      body.role,
+      body.companyIds ?? [],
+      body.areaIds ?? [],
+    );
     let mail: { sent: boolean; error?: string } = {
       sent: false,
       error: "Não foi possível enviar o e-mail.",
@@ -36,7 +47,12 @@ export async function PATCH(request: Request) {
   try {
     await ensureSeeded();
     await requireAdmin();
-    const body = await readJson<{ invitationId?: string; role?: Role; companyIds?: string[] }>(request);
+    const body = await readJson<{
+      invitationId?: string;
+      role?: Role;
+      companyIds?: string[];
+      areaIds?: RequestArea[];
+    }>(request);
     if (!body.invitationId || !body.role) {
       return jsonError("Informe o convite e o perfil.");
     }
@@ -44,6 +60,7 @@ export async function PATCH(request: Request) {
       body.invitationId,
       body.role,
       body.companyIds ?? [],
+      body.areaIds ?? [],
     );
     return jsonOk({ invitation });
   } catch (caught) {

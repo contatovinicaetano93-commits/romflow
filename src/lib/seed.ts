@@ -64,7 +64,8 @@ export const SEED: Database = {
       name: "Rodrigo",
       email: "adm@romconcept.com.br",
       password: "demo",
-      role: "admin",
+      role: "master",
+      areaIds: ["financeiro", "manutencao", "compras", "rh"],
       status: "active",
       companyIds: [
         "cmp_baru_brasil",

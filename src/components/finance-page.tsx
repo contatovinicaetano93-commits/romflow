@@ -23,9 +23,7 @@ export function FinancePage({
   users: User[];
   onOpen: (expense: Expense) => void;
 }) {
-  const [tab, setTab] = useState<
-    "all" | "pending" | "review" | "returned" | "scheduled" | "approved" | "paid"
-  >("all");
+  const [tab, setTab] = useState<"all" | "review" | "returned" | "approved" | "rejected">("all");
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -33,18 +31,14 @@ export function FinancePage({
       switch (tab) {
         case "all":
           return true;
-        case "pending":
-          return item.status === "enviada";
         case "review":
-          return item.status === "em_analise";
+          return item.status === "em_analise" || item.status === "aberta" || item.status === "em_andamento";
         case "returned":
-          return item.status === "aguardando_documentacao";
-        case "scheduled":
-          return item.status === "agendada";
+          return item.status === "devolvido";
         case "approved":
-          return item.status === "aprovada";
-        case "paid":
-          return item.status === "paga";
+          return item.status === "aprovada" || item.status === "finalizada";
+        case "rejected":
+          return item.status === "recusada" || item.status === "cancelada";
         default: {
           const exhaustive: never = tab;
           return exhaustive;
@@ -57,30 +51,33 @@ export function FinancePage({
   }, [expenses, query, tab]);
 
   const inReview = expenses.filter((item) =>
-    ["enviada", "em_analise", "aguardando_documentacao"].includes(item.status),
+    ["em_analise", "devolvido", "aberta", "em_andamento"].includes(item.status),
   );
-  const waitingPay = expenses.filter((item) => ["aprovada", "agendada"].includes(item.status));
-  const paid = expenses.filter((item) => item.status === "paga");
+  const waitingPay = expenses.filter(
+    (item) =>
+      ["aprovada", "em_andamento", "finalizada"].includes(item.status) && !item.payment_proof,
+  );
+  const paid = expenses.filter((item) => Boolean(item.payment_proof));
 
   const counts = {
-    pending: expenses.filter((item) => item.status === "enviada").length,
-    review: expenses.filter((item) => item.status === "em_analise").length,
-    returned: expenses.filter((item) => item.status === "aguardando_documentacao").length,
-    scheduled: expenses.filter((item) => item.status === "agendada").length,
-    approved: expenses.filter((item) => item.status === "aprovada").length,
-    paid: paid.length,
+    review: expenses.filter((item) =>
+      ["em_analise", "aberta", "em_andamento"].includes(item.status),
+    ).length,
+    returned: expenses.filter((item) => item.status === "devolvido").length,
+    approved: expenses.filter((item) => item.status === "aprovada" || item.status === "finalizada").length,
+    rejected: expenses.filter((item) => item.status === "recusada" || item.status === "cancelada").length,
   };
 
   return (
     <div className="page-stack">
       <section className="page-title-row">
         <div>
-          <span className="eyebrow">FINANCEIRO DIRETO</span>
+          <span className="eyebrow">{mode === "approvals" ? "FILA DA ÁREA" : "PAGAMENTOS"}</span>
           <h2>{mode === "approvals" ? "Central de aprovação" : "Pagamentos"}</h2>
           <p>
             {mode === "approvals"
               ? "Analise documentos e decida com rapidez e segurança."
-              : "Agende, conclua e anexe o comprovante final."}
+              : "Anexe o comprovante das solicitações de financeiro, manutenção, compras e RH."}
           </p>
         </div>
       </section>
@@ -122,23 +119,17 @@ export function FinancePage({
             <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")}>
               Todas <span>{expenses.length}</span>
             </button>
-            <button className={tab === "pending" ? "active" : ""} onClick={() => setTab("pending")}>
-              1. Enviada {counts.pending > 0 ? <span>{counts.pending}</span> : null}
-            </button>
             <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>
-              2. Em análise {counts.review > 0 ? <span>{counts.review}</span> : null}
+              Em análise {counts.review > 0 ? <span>{counts.review}</span> : null}
             </button>
             <button className={tab === "returned" ? "active" : ""} onClick={() => setTab("returned")}>
-              3. Devolvido {counts.returned > 0 ? <span>{counts.returned}</span> : null}
-            </button>
-            <button className={tab === "scheduled" ? "active" : ""} onClick={() => setTab("scheduled")}>
-              4. Agendado {counts.scheduled > 0 ? <span>{counts.scheduled}</span> : null}
+              Devolvido {counts.returned > 0 ? <span>{counts.returned}</span> : null}
             </button>
             <button className={tab === "approved" ? "active" : ""} onClick={() => setTab("approved")}>
-              5. Aprovado {counts.approved > 0 ? <span>{counts.approved}</span> : null}
+              Aprovado {counts.approved > 0 ? <span>{counts.approved}</span> : null}
             </button>
-            <button className={tab === "paid" ? "active" : ""} onClick={() => setTab("paid")}>
-              6. Pago {counts.paid > 0 ? <span>{counts.paid}</span> : null}
+            <button className={tab === "rejected" ? "active" : ""} onClick={() => setTab("rejected")}>
+              Recusado {counts.rejected > 0 ? <span>{counts.rejected}</span> : null}
             </button>
           </div>
         </div>

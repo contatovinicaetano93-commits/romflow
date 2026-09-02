@@ -18,6 +18,7 @@ import type {
   FinanceAction,
   FinanceActionPayload,
   Invitation,
+  RequestArea,
   Role,
   User,
 } from "./types";
@@ -70,6 +71,7 @@ type StoreValue = {
   logout: () => Promise<void>;
   selectCompany: (id: string) => void;
   switchCompany: () => void;
+  reload: () => Promise<void>;
   accessibleCompanies: () => Company[];
   companyExpenses: (companyId?: string) => Expense[];
   createExpense: (expense: Omit<Expense, "id" | "created" | "updated">) => Promise<Expense>;
@@ -82,15 +84,22 @@ type StoreValue = {
     email: string,
     role: Role,
     companyIds: string[],
+    areaIds: string[],
   ) => Promise<Invitation & { emailSent: boolean; emailError?: string }>;
   validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
-  updateUserAccess: (userId: string, role: Role, companyIds: string[]) => Promise<void>;
+  updateUserAccess: (
+    userId: string,
+    role: Role,
+    companyIds: string[],
+    areaIds: RequestArea[],
+  ) => Promise<void>;
   updateInvitationAccess: (
     invitationId: string,
     role: Role,
     companyIds: string[],
+    areaIds: RequestArea[],
   ) => Promise<void>;
   createCompany: (input: { name: string; color: string }) => Promise<void>;
   createCategory: (input: { name: string; color: string }) => Promise<void>;
@@ -243,14 +252,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const inviteUser = useCallback(
-    async (email: string, role: Role, companyIds: string[]) => {
+    async (email: string, role: Role, companyIds: string[], areaIds: string[]) => {
       const result = await api<{
         invitation: Invitation;
         emailSent: boolean;
         emailError?: string;
       }>("/api/invitations", {
         method: "POST",
-        body: JSON.stringify({ email, role, companyIds }),
+        body: JSON.stringify({ email, role, companyIds, areaIds }),
       });
       await refreshData();
       return { ...result.invitation, emailSent: result.emailSent, emailError: result.emailError };
@@ -291,10 +300,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const updateUserAccess = useCallback(
-    async (userId: string, role: Role, companyIds: string[]) => {
+    async (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => {
       const result = await api<{ user: User }>("/api/users", {
         method: "PATCH",
-        body: JSON.stringify({ userId, role, companyIds }),
+        body: JSON.stringify({ userId, role, companyIds, areaIds }),
       });
       if (user?.id === userId) {
         setUser(result.user);
@@ -309,10 +318,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const updateInvitationAccess = useCallback(
-    async (invitationId: string, role: Role, companyIds: string[]) => {
+    async (invitationId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => {
       await api("/api/invitations", {
         method: "PATCH",
-        body: JSON.stringify({ invitationId, role, companyIds }),
+        body: JSON.stringify({ invitationId, role, companyIds, areaIds }),
       });
       await refreshData();
     },
@@ -370,6 +379,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       logout,
       selectCompany,
       switchCompany,
+      reload: refreshData,
       accessibleCompanies,
       companyExpenses,
       createExpense,
@@ -406,6 +416,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ready,
       selectCompany,
       switchCompany,
+      refreshData,
       toggleUserStatus,
       updateCategory,
       updateInvitationAccess,

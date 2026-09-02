@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock3,
   FileWarning,
+  Hammer,
   Send,
   XCircle,
 } from "lucide-react";
@@ -13,20 +14,21 @@ import { assertNever } from "@/lib/types";
 
 function StatusIcon({ status }: { status: ExpenseStatus }) {
   switch (status) {
-    case "enviada":
-      return <Send size={13} />;
     case "em_analise":
       return <Clock3 size={13} />;
-    case "aguardando_documentacao":
+    case "devolvido":
       return <FileWarning size={13} />;
     case "aprovada":
       return <CheckCircle2 size={13} />;
-    case "agendada":
-      return <Clock3 size={13} />;
-    case "paga":
-      return <CheckCircle2 size={13} />;
     case "recusada":
+    case "cancelada":
       return <XCircle size={13} />;
+    case "aberta":
+      return <Send size={13} />;
+    case "em_andamento":
+      return <Hammer size={13} />;
+    case "finalizada":
+      return <CheckCircle2 size={13} />;
     default:
       return assertNever(status);
   }

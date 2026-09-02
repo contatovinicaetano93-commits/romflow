@@ -3,18 +3,20 @@
 import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { daysUntil, formatDate, money, shortId } from "@/lib/format";
-import type { Expense, ExpenseStatus, Screen } from "@/lib/types";
+import type { Expense, ExpenseStatus, Screen, User } from "@/lib/types";
+import { newRequestScreen } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
 
 const STATUS_FILTERS: Array<{ value: "todos" | ExpenseStatus; label: string }> = [
   { value: "todos", label: "Todos os status" },
-  { value: "enviada", label: "Enviada" },
   { value: "em_analise", label: "Em análise" },
-  { value: "aguardando_documentacao", label: "Devolvido" },
-  { value: "agendada", label: "Agendado" },
+  { value: "devolvido", label: "Devolvido" },
   { value: "aprovada", label: "Aprovado" },
-  { value: "paga", label: "Pago" },
-  { value: "recusada", label: "Recusada" },
+  { value: "recusada", label: "Recusado" },
+  { value: "aberta", label: "Aberta" },
+  { value: "em_andamento", label: "Em andamento" },
+  { value: "finalizada", label: "Finalizada" },
+  { value: "cancelada", label: "Cancelada" },
 ];
 
 export function ExpenseList({
@@ -24,6 +26,7 @@ export function ExpenseList({
   subtitle = "Acompanhe prazos, documentos e cada etapa até o pagamento.",
   eyebrow = "MEU FLUXO",
   companyNames = {},
+  user,
   onSearch,
   onNavigate,
   onOpen,
@@ -34,6 +37,7 @@ export function ExpenseList({
   subtitle?: string;
   eyebrow?: string;
   companyNames?: Record<string, string>;
+  user: User;
   onSearch: (value: string) => void;
   onNavigate: (screen: Screen) => void;
   onOpen: (expense: Expense) => void;
@@ -64,7 +68,7 @@ export function ExpenseList({
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
-        <button className="primary-button" onClick={() => onNavigate("new-expense")}>
+        <button className="primary-button" onClick={() => onNavigate(newRequestScreen(user))}>
           <Plus size={18} /> Nova Solicitação
         </button>
       </section>

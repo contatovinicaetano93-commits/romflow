@@ -7,8 +7,10 @@ import {
   categories,
   companies,
   expenses,
+  invitationAreas,
   invitationCompanies,
   invitations,
+  userAreas,
   userCompanies,
   users,
   emailLogs,
@@ -20,25 +22,33 @@ import type {
   Database,
   EmailLog,
   Expense,
-  ExpenseStatus,
-  ExpenseType,
   Invitation,
   PaymentMethod,
+  RequestAction,
+  RequestArea,
   Role,
   StoredFile,
   User,
   UserStatus,
 } from "@/lib/types";
+import {
+  allowedActions,
+  canAccessArea,
+  canSeeExpense,
+  defaultAreasForRole,
+  initialStatus,
+  isMaster,
+  nextStatus,
+  parseArea,
+  parseAreas,
+  parseExpenseType,
+  parseRole,
+  parseStatus,
+  validatePaymentDate,
+} from "@/lib/workflow";
 import { createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
-export type FinanceAction =
-  | "review"
-  | "docs"
-  | "approve"
-  | "schedule"
-  | "pay"
-  | "reject"
-  | "resubmit";
+export type FinanceAction = RequestAction;
 
 export type FinanceActionPayload = {
   note?: string;
@@ -73,7 +83,8 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
     id: row.id,
     title: row.title,
     description: row.description,
-    expense_type: row.expenseType as ExpenseType,
+    area: parseArea(row.area),
+    expense_type: parseExpenseType(row.expenseType),
     event_project: row.eventProject,
     amount: row.amount,
     category: row.category,
@@ -86,25 +97,19 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
     account: row.account,
     boleto_code: row.boletoCode,
     max_payment_date: row.maxPaymentDate,
+    payment_date_justification: row.paymentDateJustification ?? "",
     receipt_justification: row.receiptJustification,
     receipt: row.receipt ?? null,
     payment_proof: row.paymentProof ?? null,
     company: row.companyId,
     requester: row.requesterId,
     approver: row.approverId,
-    status: row.status as ExpenseStatus,
+    status: parseStatus(row.status),
     scheduled_date: row.scheduledDate,
     review_note: row.reviewNote,
     created: row.created,
     updated: row.updated,
   };
-}
-
-function parseRole(role: unknown): Role {
-  if (role === "admin" || role === "financeiro" || role === "solicitante") {
-    return role;
-  }
-  throw new Error("Perfil inválido.");
 }
 
 async function resolveCompanyIds(companyIds: string[]): Promise<string[]> {
@@ -154,22 +159,46 @@ async function replaceInvitationCompanies(invitationId: string, companyIds: stri
   );
 }
 
+async function replaceUserAreas(userId: string, areas: RequestArea[]): Promise<void> {
+  const db = getDb();
+  await db.delete(userAreas).where(eq(userAreas.userId, userId));
+  if (areas.length === 0) {
+    return;
+  }
+  await db.insert(userAreas).values(areas.map((area) => ({ userId, area })));
+}
+
+async function replaceInvitationAreas(invitationId: string, areas: RequestArea[]): Promise<void> {
+  const db = getDb();
+  await db.delete(invitationAreas).where(eq(invitationAreas.invitationId, invitationId));
+  if (areas.length === 0) {
+    return;
+  }
+  await db.insert(invitationAreas).values(areas.map((area) => ({ invitationId, area })));
+}
+
 async function loadAllUsers(): Promise<User[]> {
   const db = getDb();
   const rows = await db.select().from(users);
   const links = await db.select().from(userCompanies);
+  const areaLinks = await db.select().from(userAreas);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     email: row.email,
-    role: row.role as Role,
+    role: parseRole(row.role),
     status: row.status as UserStatus,
     companyIds: links.filter((item) => item.userId === row.id).map((item) => item.companyId),
+    areaIds: parseAreas(areaLinks.filter((item) => item.userId === row.id).map((item) => item.area)),
     created: row.created,
   }));
 }
 
-export async function listNotificationRecipients(companyId: string, requesterId: string): Promise<User[]> {
+export async function listNotificationRecipients(
+  companyId: string,
+  requesterId: string,
+  area: RequestArea,
+): Promise<User[]> {
   const all = await loadAllUsers();
   const seen = new Set<string>();
   const recipients: User[] = [];
@@ -178,9 +207,10 @@ export async function listNotificationRecipients(companyId: string, requesterId:
       continue;
     }
     const isRequester = user.id === requesterId;
-    const watchesCompany =
-      (user.role === "admin" || user.role === "financeiro") && user.companyIds.includes(companyId);
-    if (!isRequester && !watchesCompany) {
+    const watches =
+      user.companyIds.includes(companyId) &&
+      (isMaster(user.role) || (canAccessArea(user, area) && user.role !== "solicitante"));
+    if (!isRequester && !watches) {
       continue;
     }
     const key = user.email.trim().toLowerCase();
@@ -203,7 +233,13 @@ function mapEmailLog(row: typeof emailLogs.$inferSelect): EmailLog {
     invitationId: row.invitationId,
     toEmail: row.toEmail,
     toName: row.toName,
-    toRole: role === "admin" || role === "financeiro" || role === "solicitante" ? role : null,
+    toRole: (() => {
+      try {
+        return parseRole(role);
+      } catch {
+        return null;
+      }
+    })(),
     subject: row.subject,
     status: row.status === "sent" ? "sent" : "failed",
     error: row.error,
@@ -216,11 +252,13 @@ async function loadInvitations(): Promise<Invitation[]> {
   const db = getDb();
   const rows = await db.select().from(invitations).orderBy(desc(invitations.created));
   const links = await db.select().from(invitationCompanies);
+  const areaLinks = await db.select().from(invitationAreas);
   return rows.map((row) => ({
     id: row.id,
     email: row.email,
-    role: row.role as Role,
+    role: parseRole(row.role),
     companyIds: links.filter((item) => item.invitationId === row.id).map((item) => item.companyId),
+    areaIds: parseAreas(areaLinks.filter((item) => item.invitationId === row.id).map((item) => item.area)),
     token: row.token,
     invitedBy: row.invitedBy,
     created: row.created,
@@ -255,31 +293,22 @@ export async function getSnapshot(actor: User): Promise<Database> {
   const categoryRows = await db.select().from(categories);
   const expenseRows = await db.select().from(expenses).orderBy(desc(expenses.created));
   const allUsers = actor.role === "solicitante" ? [actor] : await loadAllUsers();
-  const allInvites = actor.role === "admin" ? await loadInvitations() : [];
-  const logs =
-    actor.role === "admin"
-      ? await db.select().from(auditLogs).orderBy(desc(auditLogs.created))
-      : [];
+  const allInvites = isMaster(actor.role) ? await loadInvitations() : [];
+  const logs = isMaster(actor.role)
+    ? await db.select().from(auditLogs).orderBy(desc(auditLogs.created))
+    : [];
 
-  const visibleCompanies =
-    actor.role === "admin"
-      ? companyRows
-      : companyRows.filter((item) => actor.companyIds.includes(item.id));
+  const visibleCompanies = isMaster(actor.role)
+    ? companyRows
+    : companyRows.filter((item) => actor.companyIds.includes(item.id));
 
-  const visibleExpenses = expenseRows.filter((item) => {
-    if (!actor.companyIds.includes(item.companyId)) {
-      return false;
-    }
-    if (actor.role === "solicitante") {
-      return item.requesterId === actor.id;
-    }
-    return true;
-  });
+  const visibleExpenses = expenseRows
+    .map(mapExpense)
+    .filter((item) => canSeeExpense(actor, item));
 
-  const mailRows =
-    actor.role === "admin"
-      ? await db.select().from(emailLogs).orderBy(desc(emailLogs.created))
-      : [];
+  const mailRows = isMaster(actor.role)
+    ? await db.select().from(emailLogs).orderBy(desc(emailLogs.created))
+    : [];
 
   return {
     revision: 1,
@@ -287,7 +316,7 @@ export async function getSnapshot(actor: User): Promise<Database> {
     categories: categoryRows.map(mapCategory),
     users: allUsers,
     invitations: allInvites,
-    expenses: visibleExpenses.map(mapExpense),
+    expenses: visibleExpenses,
     auditLogs: logs.map((item) => ({
       id: item.id,
       user: item.userId,
@@ -333,9 +362,10 @@ export async function bootstrapAdmin(name: string, email: string, password: stri
     id: uid("usr"),
     name: name.trim(),
     email: email.trim().toLowerCase(),
-    role: "admin",
+    role: "master",
     status: "active",
     companyIds: companyRows.map((item) => item.id),
+    areaIds: ["financeiro", "manutencao", "compras", "rh"],
     created,
   };
   await db.insert(users).values({
@@ -343,7 +373,7 @@ export async function bootstrapAdmin(name: string, email: string, password: stri
     name: admin.name,
     email: admin.email,
     passwordHash: await hashPassword(password),
-    role: "admin",
+    role: "master",
     status: "active",
     created,
   });
@@ -355,6 +385,7 @@ export async function bootstrapAdmin(name: string, email: string, password: stri
       })),
     );
   }
+  await replaceUserAreas(admin.id, admin.areaIds);
   await createSession(admin.id);
   return admin;
 }
@@ -366,9 +397,19 @@ export async function createExpenseRecord(
   if (!canAccessCompany(actor, input.company)) {
     throw new Error("Você não tem acesso a esta empresa.");
   }
+  if (!canAccessArea(actor, input.area)) {
+    throw new Error("Você não tem acesso a esta área de solicitação.");
+  }
+  if (input.area === "financeiro") {
+    validatePaymentDate(input.expense_type, input.max_payment_date, input.payment_date_justification);
+  }
   const created = new Date().toISOString();
   const expense: Expense = {
     ...input,
+    requester: actor.id,
+    status: initialStatus(input.area),
+    payment_proof: null,
+    approver: null,
     id: uid("exp"),
     created,
     updated: created,
@@ -379,6 +420,7 @@ export async function createExpenseRecord(
       id: expense.id,
       title: expense.title,
       description: expense.description,
+      area: expense.area,
       expenseType: expense.expense_type,
       eventProject: expense.event_project,
       amount: expense.amount,
@@ -392,6 +434,7 @@ export async function createExpenseRecord(
       account: expense.account,
       boletoCode: expense.boleto_code,
       maxPaymentDate: expense.max_payment_date,
+      paymentDateJustification: expense.payment_date_justification,
       receiptJustification: expense.receipt_justification,
       receipt: expense.receipt,
       paymentProof: expense.payment_proof,
@@ -404,7 +447,7 @@ export async function createExpenseRecord(
       created,
       updated: created,
     });
-  await writeAudit(actor.id, "CREATE_EXPENSE", expense.id, "—", "enviada");
+  await writeAudit(actor.id, "CREATE_EXPENSE", expense.id, "—", expense.status);
   return expense;
 }
 
@@ -414,69 +457,54 @@ export async function applyFinanceActionRecord(
   action: FinanceAction,
   payload?: FinanceActionPayload,
 ): Promise<Expense> {
-  if (actor.role !== "admin" && actor.role !== "financeiro" && action !== "resubmit") {
-    throw new Error("Sem permissão para esta ação.");
-  }
   const db = getDb();
   const [currentRow] = await db.select().from(expenses).where(eq(expenses.id, expenseId)).limit(1);
   if (!currentRow) {
     throw new Error("Solicitação não encontrada.");
   }
   const current = mapExpense(currentRow);
-  if (!canAccessCompany(actor, current.company)) {
-    throw new Error("Você não tem acesso a esta empresa.");
+  if (!canSeeExpense(actor, current)) {
+    throw new Error("Você não tem acesso a esta solicitação.");
   }
-  let status: ExpenseStatus = current.status;
+  const permitted = allowedActions(actor, current);
+  if (!permitted.includes(action)) {
+    throw new Error("Sem permissão para esta ação.");
+  }
+  if ((action === "reject" || action === "docs") && !payload?.note?.trim()) {
+    throw new Error("Informe a justificativa.");
+  }
+  if (action === "attach_proof" && !payload?.proof && !current.payment_proof) {
+    throw new Error("Anexe o recibo de pagamento.");
+  }
+  if (action === "resubmit" && !payload?.receipt && !current.receipt) {
+    throw new Error("Anexe o documento solicitado antes de reenviar.");
+  }
+  const status = nextStatus(action, current);
   let audit: AuditAction = "UPDATE_EXPENSE";
   switch (action) {
-    case "review":
-      status = "em_analise";
-      audit = "START_REVIEW";
-      break;
     case "docs":
-      if (!payload?.note || payload.note.trim().length < 10) {
-        throw new Error("Por favor, descreva quais documentos estão faltando.");
-      }
-      status = "aguardando_documentacao";
       audit = "REQUEST_DOCUMENTATION";
       break;
     case "approve":
-      status = "aprovada";
       audit = "APPROVE_EXPENSE";
       break;
-    case "schedule":
-      if (!payload?.scheduledDate) {
-        throw new Error("Informe a data de agendamento.");
-      }
-      status = "agendada";
-      audit = "SCHEDULE_PAYMENT";
-      break;
-    case "pay":
-      if (!payload?.proof && !current.payment_proof) {
-        throw new Error("O envio do comprovante de pagamento é obrigatório.");
-      }
-      status = "paga";
-      audit = "PAY_EXPENSE";
-      break;
     case "reject":
-      if (!payload?.note || payload.note.trim().length < 10) {
-        throw new Error("Informe o motivo da recusa.");
-      }
-      status = "recusada";
       audit = "REJECT_EXPENSE";
       break;
     case "resubmit":
-      if (current.requester !== actor.id && actor.role !== "admin") {
-        throw new Error("Só o solicitante pode reenviar esta solicitação.");
-      }
-      if (current.status !== "aguardando_documentacao") {
-        throw new Error("Só é possível reenviar solicitações devolvidas.");
-      }
-      if (!payload?.receipt && !current.receipt) {
-        throw new Error("Anexe o documento solicitado antes de reenviar.");
-      }
-      status = "em_analise";
       audit = "UPDATE_EXPENSE";
+      break;
+    case "attach_proof":
+      audit = "ATTACH_PROOF";
+      break;
+    case "progress":
+      audit = "PROGRESS_EXPENSE";
+      break;
+    case "complete":
+      audit = "COMPLETE_EXPENSE";
+      break;
+    case "cancel":
+      audit = "CANCEL_EXPENSE";
       break;
     default: {
       const exhaustive: never = action;
@@ -486,10 +514,10 @@ export async function applyFinanceActionRecord(
   const updated: Expense = {
     ...current,
     status,
-    approver: action === "resubmit" ? current.approver : actor.id,
+    approver: action === "resubmit" || action === "progress" || action === "complete" || action === "cancel"
+      ? current.approver
+      : actor.id,
     review_note: payload?.note ?? current.review_note,
-    scheduled_date:
-      action === "schedule" ? (payload?.scheduledDate ?? current.scheduled_date) : current.scheduled_date,
     payment_proof: payload?.proof ?? current.payment_proof,
     receipt: payload?.receipt ?? current.receipt,
     updated: new Date().toISOString(),
@@ -500,7 +528,6 @@ export async function applyFinanceActionRecord(
       status: updated.status,
       approverId: updated.approver,
       reviewNote: updated.review_note,
-      scheduledDate: updated.scheduled_date,
       paymentProof: updated.payment_proof,
       receipt: updated.receipt,
       updated: updated.updated,
@@ -515,10 +542,15 @@ export async function createInvitationRecord(
   email: string,
   role: Role,
   companyIds: string[],
+  areaIds: RequestArea[],
 ): Promise<Invitation> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode criar acessos.");
+  }
   const normalized = email.trim().toLowerCase();
   const resolvedRole = parseRole(role);
   const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalized)).limit(1);
   if (existingUser) {
@@ -537,6 +569,7 @@ export async function createInvitationRecord(
     email: email.trim().toLowerCase(),
     role: resolvedRole,
     companyIds: resolvedCompanies,
+    areaIds: resolvedAreas,
     token: uid("token"),
     invitedBy: actor.id,
     created: new Date().toISOString(),
@@ -561,6 +594,7 @@ export async function createInvitationRecord(
       })),
     );
   }
+  await replaceInvitationAreas(invitation.id, resolvedAreas);
   return invitation;
 }
 
@@ -577,11 +611,16 @@ export async function getInvitationByToken(token: string): Promise<Invitation> {
     .select()
     .from(invitationCompanies)
     .where(eq(invitationCompanies.invitationId, row.id));
+  const areaLinks = await db
+    .select()
+    .from(invitationAreas)
+    .where(eq(invitationAreas.invitationId, row.id));
   return {
     id: row.id,
     email: row.email,
-    role: row.role as Role,
+    role: parseRole(row.role),
     companyIds: links.map((item) => item.companyId),
+    areaIds: parseAreas(areaLinks.map((item) => item.area)),
     token: row.token,
     invitedBy: row.invitedBy,
     created: row.created,
@@ -600,6 +639,9 @@ export async function acceptInvitation(token: string, name: string, password: st
     role: invitation.role,
     status: "active",
     companyIds: invitation.companyIds,
+    areaIds: invitation.areaIds.length
+      ? invitation.areaIds
+      : defaultAreasForRole(invitation.role, invitation.role === "solicitante" ? ["financeiro"] : []),
     created,
   };
   const db = getDb();
@@ -620,6 +662,7 @@ export async function acceptInvitation(token: string, name: string, password: st
       })),
     );
   }
+  await replaceUserAreas(nextUser.id, nextUser.areaIds);
   await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
   await createSession(nextUser.id);
   return nextUser;
@@ -630,21 +673,27 @@ export async function updateUserAccessRecord(
   userId: string,
   role: Role,
   companyIds: string[],
+  areaIds: RequestArea[],
 ): Promise<User> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode editar acessos.");
+  }
   const resolvedRole = parseRole(role);
   const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!row) {
     throw new Error("Usuário não encontrado.");
   }
-  if (actor.id === userId && resolvedRole !== "admin") {
-    throw new Error("Você não pode remover o próprio perfil de administrador.");
+  if (actor.id === userId && resolvedRole !== "master") {
+    throw new Error("Você não pode remover o próprio perfil de master.");
   }
-  if (row.role === "admin" && resolvedRole !== "admin") {
-    const adminRows = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
-    if (adminRows.length <= 1) {
-      throw new Error("É preciso manter ao menos um administrador.");
+  if (parseRole(row.role) === "master" && resolvedRole !== "master") {
+    const adminRows = await db.select({ id: users.id, role: users.role }).from(users);
+    const masters = adminRows.filter((item) => parseRole(item.role) === "master");
+    if (masters.length <= 1) {
+      throw new Error("É preciso manter ao menos um master.");
     }
   }
   const previousLinks = await db
@@ -653,12 +702,13 @@ export async function updateUserAccessRecord(
     .where(eq(userCompanies.userId, userId));
   await db.update(users).set({ role: resolvedRole }).where(eq(users.id, userId));
   await replaceUserCompanies(userId, resolvedCompanies);
+  await replaceUserAreas(userId, resolvedAreas);
   await writeAudit(
     actor.id,
     "UPDATE_USER",
     userId,
     `${row.role} | ${previousLinks.map((item) => item.companyId).join(",") || "nenhuma"}`,
-    `${resolvedRole} | ${resolvedCompanies.join(",")}`,
+    `${resolvedRole} | ${resolvedCompanies.join(",")} | ${resolvedAreas.join(",")}`,
   );
   const updated = await loadUser(userId);
   if (!updated) {
@@ -671,9 +721,11 @@ export async function updateInvitationAccessRecord(
   invitationId: string,
   role: Role,
   companyIds: string[],
+  areaIds: RequestArea[],
 ): Promise<Invitation> {
   const resolvedRole = parseRole(role);
   const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const [row] = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
   if (!row || row.accepted) {
@@ -681,11 +733,13 @@ export async function updateInvitationAccessRecord(
   }
   await db.update(invitations).set({ role: resolvedRole }).where(eq(invitations.id, invitationId));
   await replaceInvitationCompanies(invitationId, resolvedCompanies);
+  await replaceInvitationAreas(invitationId, resolvedAreas);
   return {
     id: row.id,
     email: row.email,
     role: resolvedRole,
     companyIds: resolvedCompanies,
+    areaIds: resolvedAreas,
     token: row.token,
     invitedBy: row.invitedBy,
     created: row.created,

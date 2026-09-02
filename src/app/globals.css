@@ -102,7 +102,94 @@ body {
 .invite-access-card p {
   margin: 0 0 8px;
   color: #a1a1aa;
-  font-size: 12px;
+  font-size: 14px;
+}
+
+.email-log-header h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.email-log-header p {
+  margin: 0;
+  color: var(--rom-muted);
+  font-size: 14px;
+}
+
+.email-status {
+  display: inline-flex;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.form-footer-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.company-card-wrap {
+  position: relative;
+}
+
+.company-inbox-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: #10b981;
+  color: #052e16;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.company-inbox-popup {
+  position: absolute;
+  top: 52px;
+  right: 12px;
+  z-index: 3;
+  width: min(280px, calc(100% - 24px));
+  background: #161618;
+  border: 1px solid #27272a;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 12px 40px #00000066;
+}
+
+.company-inbox-popup strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.company-inbox-popup p {
+  margin: 0 0 6px;
+  color: #d4d4d8;
+  font-size: 13px;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+.side-nav small,
+.eyebrow,
+.table-subline,
+small {
+  font-size: 13px !important;
 }
 
 .invite-access-card .user-companies-chips {
