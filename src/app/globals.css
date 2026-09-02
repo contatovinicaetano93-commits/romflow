@@ -1,0 +1,143 @@
+@import "./romflow.css";
+
+:root {
+  --rom-text: #fafafa;
+  --rom-primary: #10b981;
+  --rom-muted: #a1a1aa;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+.sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar .brand-row,
+.sidebar .company-chip,
+.sidebar-security,
+.sidebar-user {
+  flex-shrink: 0;
+}
+
+.side-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #a1a1aa #18181b;
+}
+
+.side-nav::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.side-nav::-webkit-scrollbar-track,
+.sidebar::-webkit-scrollbar-track {
+  background: #18181b;
+  border-radius: 999px;
+}
+
+.side-nav::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb {
+  background: #71717a;
+  border-radius: 999px;
+}
+
+.chart-panel .empty-state,
+.trend-panel .empty-state,
+.report-status .empty-state,
+.report-category + .empty-state,
+.panel .empty-state {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.invitation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.invitation-companies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.invite-access-card {
+  border: 1px solid #ffffff14;
+  background: #ffffff08;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+}
+
+.invite-access-card p {
+  margin: 0 0 8px;
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.invite-access-card .user-companies-chips {
+  max-width: none;
+}
+
+.email-log-header {
+  margin-bottom: 12px;
+}
+
+.email-log-header h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.email-log-header p {
+  margin: 0;
+  color: var(--rom-muted);
+  font-size: 12px;
+}
+
+.email-status {
+  display: inline-flex;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.email-status.sent {
+  color: #6ee7b7;
+  background: #10b9811a;
+}
+
+.email-status.failed {
+  color: #fca5a5;
+  background: #ef44441a;
+}
