@@ -2,8 +2,9 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { Check, Copy, Link2, Mail, Pencil, Search, Shield, UserPlus, Users } from "lucide-react";
-import { ROLE_CLASS, ROLE_LABEL, cls, formatDate } from "@/lib/format";
-import type { Company, Invitation, Role, User } from "@/lib/types";
+import { ROLE_CLASS, ROLE_LABEL, AREA_LABEL, cls, formatDate } from "@/lib/format";
+import type { Company, Invitation, RequestArea, Role, User } from "@/lib/types";
+import { REQUEST_AREAS, areaForAdminRole } from "@/lib/workflow";
 
 function signupUrl(token: string) {
   return `${window.location.origin}/convite?token=${token}`;
@@ -86,6 +87,62 @@ function CompanyPicker({
   );
 }
 
+function AreaPicker({
+  selected,
+  onChange,
+  role,
+}: {
+  selected: RequestArea[];
+  onChange: (next: RequestArea[]) => void;
+  role: Role;
+}) {
+  if (role !== "solicitante") {
+    const area = areaForAdminRole(role);
+    return (
+      <p className="signup-field-hint">
+        Área deste perfil: <strong>{area ? AREA_LABEL[area] : "Todas"}</strong>
+      </p>
+    );
+  }
+  return (
+    <div className="company-selection-group">
+      <p className="company-selection-label">Áreas que o solicitante pode abrir</p>
+      <div className="company-checkbox-grid">
+        {REQUEST_AREAS.map((area) => {
+          const checked = selected.includes(area);
+          return (
+            <label key={area} className={cls("company-checkbox-card", checked && "checked")}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() =>
+                  onChange(checked ? selected.filter((item) => item !== area) : [...selected, area])
+                }
+              />
+              <span className="company-info">
+                <strong>{AREA_LABEL[area]}</strong>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RoleSelect({ value, onChange }: { value: Role; onChange: (role: Role) => void }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value as Role)}>
+      <option value="solicitante">Solicitante</option>
+      <option value="admin_financeiro">Admin financeiro</option>
+      <option value="admin_manutencao">Admin manutenção</option>
+      <option value="admin_compras">Admin compras</option>
+      <option value="admin_rh">Admin RH</option>
+      <option value="master">Master</option>
+    </select>
+  );
+}
+
 type EditingTarget =
   | { kind: "user"; user: User }
   | { kind: "invitation"; invitation: Invitation };
@@ -108,9 +165,15 @@ export function UsersPage({
     email: string,
     role: Role,
     companyIds: string[],
+    areaIds: RequestArea[],
   ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
-  onUpdateUser: (userId: string, role: Role, companyIds: string[]) => Promise<void>;
-  onUpdateInvitation: (invitationId: string, role: Role, companyIds: string[]) => Promise<void>;
+  onUpdateUser: (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => Promise<void>;
+  onUpdateInvitation: (
+    invitationId: string,
+    role: Role,
+    companyIds: string[],
+    areaIds: RequestArea[],
+  ) => Promise<void>;
   onToggle: (userId: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -118,6 +181,7 @@ export function UsersPage({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("solicitante");
   const [selected, setSelected] = useState<string[]>([]);
+  const [areas, setAreas] = useState<RequestArea[]>(["financeiro"]);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -125,6 +189,7 @@ export function UsersPage({
   const [editing, setEditing] = useState<EditingTarget | null>(null);
   const [editRole, setEditRole] = useState<Role>("solicitante");
   const [editSelected, setEditSelected] = useState<string[]>([]);
+  const [editAreas, setEditAreas] = useState<RequestArea[]>(["financeiro"]);
   const [editError, setEditError] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
 
@@ -145,6 +210,7 @@ export function UsersPage({
     setOpen(false);
     setEmail("");
     setSelected([]);
+    setAreas(["financeiro"]);
     setError("");
     setCreated(null);
     setSubmitting(false);
@@ -162,6 +228,7 @@ export function UsersPage({
     setEditing({ kind: "user", user });
     setEditRole(user.role);
     setEditSelected([...user.companyIds]);
+    setEditAreas(user.areaIds.length ? user.areaIds : ["financeiro"]);
     setEditError("");
   }
 
@@ -170,6 +237,7 @@ export function UsersPage({
     setEditing({ kind: "invitation", invitation });
     setEditRole(invitation.role);
     setEditSelected([...invitation.companyIds]);
+    setEditAreas(invitation.areaIds.length ? invitation.areaIds : ["financeiro"]);
     setEditError("");
   }
 
@@ -187,7 +255,7 @@ export function UsersPage({
     }
     setSubmitting(true);
     try {
-      const invitation = await onInvite(email, role, selected);
+      const invitation = await onInvite(email, role, selected, areas);
       const link = signupUrl(invitation.token);
       setCreated({ email: invitation.email, link });
       await copyLink(link, "created");
@@ -212,10 +280,10 @@ export function UsersPage({
     try {
       switch (editing.kind) {
         case "user":
-          await onUpdateUser(editing.user.id, editRole, editSelected);
+          await onUpdateUser(editing.user.id, editRole, editSelected, editAreas);
           break;
         case "invitation":
-          await onUpdateInvitation(editing.invitation.id, editRole, editSelected);
+          await onUpdateInvitation(editing.invitation.id, editRole, editSelected, editAreas);
           break;
         default: {
           const unexpected: never = editing;
@@ -463,13 +531,10 @@ export function UsersPage({
               </label>
               <label>
                 Perfil
-                <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-                  <option value="solicitante">Solicitante</option>
-                  <option value="financeiro">Financeiro</option>
-                  <option value="admin">Administrador</option>
-                </select>
+                <RoleSelect value={role} onChange={setRole} />
               </label>
               <CompanyPicker companies={companies} selected={selected} onChange={setSelected} />
+              <AreaPicker role={role} selected={areas} onChange={setAreas} />
               {error ? <div className="form-error">{error}</div> : null}
               <footer>
                 <button className="secondary-button" type="button" onClick={closeModal}>
@@ -514,13 +579,10 @@ export function UsersPage({
             )}
             <label>
               Perfil
-              <select value={editRole} onChange={(event) => setEditRole(event.target.value as Role)}>
-                <option value="solicitante">Solicitante</option>
-                <option value="financeiro">Financeiro</option>
-                <option value="admin">Administrador</option>
-              </select>
+              <RoleSelect value={editRole} onChange={setEditRole} />
             </label>
             <CompanyPicker companies={companies} selected={editSelected} onChange={setEditSelected} />
+            <AreaPicker role={editRole} selected={editAreas} onChange={setEditAreas} />
             {editError ? <div className="form-error">{editError}</div> : null}
             <footer>
               <button className="secondary-button" type="button" onClick={closeEdit}>

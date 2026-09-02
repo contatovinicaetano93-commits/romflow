@@ -1,22 +1,39 @@
-export type Role = "admin" | "financeiro" | "solicitante";
+export type RequestArea = "financeiro" | "manutencao" | "compras" | "rh";
+
+export type Role =
+  | "master"
+  | "admin_financeiro"
+  | "admin_manutencao"
+  | "admin_compras"
+  | "admin_rh"
+  | "solicitante";
 
 export type UserStatus = "active" | "inactive";
 
 export type ExpenseStatus =
-  | "enviada"
   | "em_analise"
-  | "aguardando_documentacao"
+  | "devolvido"
   | "aprovada"
-  | "agendada"
-  | "paga"
-  | "recusada";
+  | "recusada"
+  | "aberta"
+  | "em_andamento"
+  | "finalizada"
+  | "cancelada";
 
 export type ExpenseType =
   | "fornecedor"
-  | "reembolso"
-  | "adiantamento"
-  | "impostos"
-  | "outros";
+  | "reembolso_colaborador"
+  | "reembolso_cliente"
+  | "outros"
+  | "chamado"
+  | "pedido"
+  | "ferias"
+  | "admissao"
+  | "desligamento"
+  | "salario"
+  | "beneficio"
+  | "atestado"
+  | "uniforme";
 
 export type PaymentMethod = "pix" | "ted" | "boleto";
 
@@ -24,7 +41,10 @@ export type Screen =
   | "dashboard"
   | "expenses"
   | "my-expenses"
-  | "new-expense"
+  | "new-financeiro"
+  | "new-manutencao"
+  | "new-compras"
+  | "new-rh"
   | "approvals"
   | "payments"
   | "reports"
@@ -34,24 +54,28 @@ export type Screen =
 
 export type AuditAction =
   | "CREATE_EXPENSE"
-  | "START_REVIEW"
   | "REQUEST_DOCUMENTATION"
   | "APPROVE_EXPENSE"
-  | "SCHEDULE_PAYMENT"
-  | "PAY_EXPENSE"
   | "REJECT_EXPENSE"
   | "UPDATE_EXPENSE"
   | "DELETE_EXPENSE"
-  | "UPDATE_USER";
+  | "UPDATE_USER"
+  | "ATTACH_PROOF"
+  | "PROGRESS_EXPENSE"
+  | "COMPLETE_EXPENSE"
+  | "CANCEL_EXPENSE";
 
-export type FinanceAction =
-  | "review"
+export type RequestAction =
   | "docs"
   | "approve"
-  | "schedule"
-  | "pay"
   | "reject"
-  | "resubmit";
+  | "resubmit"
+  | "attach_proof"
+  | "progress"
+  | "complete"
+  | "cancel";
+
+export type FinanceAction = RequestAction;
 
 export type FinanceActionPayload = {
   note?: string;
@@ -85,6 +109,7 @@ export type User = {
   role: Role;
   status: UserStatus;
   companyIds: string[];
+  areaIds: RequestArea[];
   created: string;
 };
 
@@ -93,6 +118,7 @@ export type Invitation = {
   email: string;
   role: Role;
   companyIds: string[];
+  areaIds: RequestArea[];
   token: string;
   invitedBy: string;
   created: string;
@@ -111,6 +137,7 @@ export type Expense = {
   id: string;
   title: string;
   description: string;
+  area: RequestArea;
   expense_type: ExpenseType;
   event_project: string;
   amount: number;
@@ -124,6 +151,7 @@ export type Expense = {
   account: string;
   boleto_code: string;
   max_payment_date: string;
+  payment_date_justification: string;
   receipt_justification: string;
   receipt: StoredFile | null;
   payment_proof: StoredFile | null;

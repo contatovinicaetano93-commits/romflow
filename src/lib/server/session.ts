@@ -3,10 +3,12 @@ import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { SEED } from "@/lib/seed";
-import type { Role, User, UserStatus } from "@/lib/types";
+import type { User, UserStatus } from "@/lib/types";
 import { getDb } from "@/lib/db";
 import { uid } from "@/lib/db/ids";
-import { categories, companies, userCompanies, users } from "@/lib/db/schema";
+import { categories, companies, userAreas, userCompanies, users } from "@/lib/db/schema";
+import { defaultAreasForRole, parseAreas, parseRole } from "@/lib/workflow";
+import { sql } from "drizzle-orm";
 
 const COOKIE = "romflow_session";
 
@@ -72,13 +74,17 @@ export async function loadUser(userId: string): Promise<User | null> {
     return null;
   }
   const links = await db.select().from(userCompanies).where(eq(userCompanies.userId, userId));
+  const areaLinks = await db.select().from(userAreas).where(eq(userAreas.userId, userId));
+  const role = parseRole(row.role);
+  const storedAreas = parseAreas(areaLinks.map((item) => item.area));
   return {
     id: row.id,
     name: row.name,
     email: row.email,
-    role: row.role as Role,
+    role,
     status: row.status as UserStatus,
     companyIds: links.map((item) => item.companyId),
+    areaIds: storedAreas.length ? storedAreas : defaultAreasForRole(role, role === "solicitante" ? ["financeiro"] : []),
     created: row.created,
   };
 }
@@ -104,9 +110,13 @@ export async function requireUser(): Promise<User> {
 }
 
 export async function requireAdmin(): Promise<User> {
+  return requireMaster();
+}
+
+export async function requireMaster(): Promise<User> {
   const user = await requireUser();
-  if (user.role !== "admin") {
-    throw new Error("Apenas o administrador pode fazer isso.");
+  if (user.role !== "master") {
+    throw new Error("Apenas o master pode fazer isso.");
   }
   return user;
 }
@@ -145,6 +155,21 @@ export async function ensureSeeded(): Promise<void> {
     );
   }
 
+  try {
+    await db.execute(sql`UPDATE users SET role = 'master' WHERE role = 'admin'`);
+    await db.execute(sql`UPDATE users SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
+    await db.execute(sql`UPDATE invitations SET role = 'master' WHERE role = 'admin'`);
+    await db.execute(sql`UPDATE invitations SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
+    await db.execute(sql`UPDATE expenses SET area = 'financeiro' WHERE area IS NULL OR area = ''`);
+    await db.execute(sql`UPDATE expenses SET status = 'em_analise' WHERE status = 'enviada'`);
+    await db.execute(sql`UPDATE expenses SET status = 'devolvido' WHERE status = 'aguardando_documentacao'`);
+    await db.execute(sql`UPDATE expenses SET status = 'aprovada' WHERE status IN ('agendada', 'paga')`);
+    await db.execute(sql`UPDATE expenses SET expense_type = 'reembolso_colaborador' WHERE expense_type = 'reembolso'`);
+    await db.execute(sql`UPDATE expenses SET expense_type = 'outros' WHERE expense_type IN ('adiantamento', 'impostos')`);
+  } catch {
+    // Columns may not exist until drizzle push; next request after schema sync will migrate.
+  }
+
   if ((await userCount()) > 0) {
     return;
   }
@@ -166,6 +191,14 @@ export async function ensureSeeded(): Promise<void> {
       seedUser.companyIds.map((companyId) => ({
         userId: seedUser.id,
         companyId,
+      })),
+    );
+  }
+  if (seedUser.areaIds.length) {
+    await db.insert(userAreas).values(
+      seedUser.areaIds.map((area) => ({
+        userId: seedUser.id,
+        area,
       })),
     );
   }

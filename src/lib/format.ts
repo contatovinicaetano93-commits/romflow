@@ -5,6 +5,7 @@ import type {
   ExpenseStatus,
   ExpenseType,
   PaymentMethod,
+  RequestArea,
   Role,
 } from "./types";
 
@@ -74,43 +75,66 @@ export function parseMoneyInput(raw: string): number {
 }
 
 export const STATUS_LABEL: Record<ExpenseStatus, string> = {
-  enviada: "Enviada",
   em_analise: "Em análise",
-  aguardando_documentacao: "Devolvido",
-  agendada: "Agendado",
+  devolvido: "Devolvido",
   aprovada: "Aprovado",
-  paga: "Pago",
-  recusada: "Recusada",
+  recusada: "Recusado",
+  aberta: "Aberta",
+  em_andamento: "Em andamento",
+  finalizada: "Finalizada",
+  cancelada: "Cancelada",
 };
 
 export const STATUS_CLASS: Record<ExpenseStatus, string> = {
-  enviada: "status-blue",
   em_analise: "status-violet",
-  aguardando_documentacao: "status-amber",
+  devolvido: "status-amber",
   aprovada: "status-emerald",
-  agendada: "status-cyan",
-  paga: "status-emerald",
   recusada: "status-red",
+  aberta: "status-blue",
+  em_andamento: "status-cyan",
+  finalizada: "status-emerald",
+  cancelada: "status-red",
 };
 
 export const ROLE_LABEL: Record<Role, string> = {
-  admin: "Administrador",
-  financeiro: "Financeiro",
+  master: "Master",
+  admin_financeiro: "Admin financeiro",
+  admin_manutencao: "Admin manutenção",
+  admin_compras: "Admin compras",
+  admin_rh: "Admin RH",
   solicitante: "Solicitante",
 };
 
 export const ROLE_CLASS: Record<Role, string> = {
-  admin: "role-admin",
-  financeiro: "role-financeiro",
+  master: "role-admin",
+  admin_financeiro: "role-financeiro",
+  admin_manutencao: "role-admin",
+  admin_compras: "role-admin",
+  admin_rh: "role-admin",
   solicitante: "role-solicitante",
 };
 
+export const AREA_LABEL: Record<RequestArea, string> = {
+  financeiro: "Financeiro",
+  manutencao: "Manutenção",
+  compras: "Compras",
+  rh: "RH",
+};
+
 export const EXPENSE_TYPE_LABEL: Record<ExpenseType, string> = {
-  fornecedor: "Pagamento a fornecedor",
-  reembolso: "Reembolso",
-  adiantamento: "Adiantamento",
-  impostos: "Impostos e taxas",
+  fornecedor: "Pagamento fornecedor",
+  reembolso_colaborador: "Reembolso funcionário/colaborador",
+  reembolso_cliente: "Reembolso/Estorno cliente",
   outros: "Outros",
+  chamado: "Chamado de manutenção",
+  pedido: "Pedido de compras",
+  ferias: "Férias",
+  admissao: "Admissão",
+  desligamento: "Desligamento",
+  salario: "Alteração salarial",
+  beneficio: "Benefício",
+  atestado: "Atestado",
+  uniforme: "Uniforme",
 };
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -129,15 +153,16 @@ export const CATEGORY_COLOR: Record<string, string> = {
 
 export const AUDIT_LABEL: Record<AuditAction, string> = {
   CREATE_EXPENSE: "Criou solicitação",
-  START_REVIEW: "Iniciou análise",
-  REQUEST_DOCUMENTATION: "Solicitou documentos",
-  APPROVE_EXPENSE: "Aprovou despesa",
-  SCHEDULE_PAYMENT: "Agendou pagamento",
-  PAY_EXPENSE: "Concluiu pagamento",
-  REJECT_EXPENSE: "Recusou despesa",
-  UPDATE_EXPENSE: "Atualizou despesa",
-  DELETE_EXPENSE: "Excluiu despesa",
+  REQUEST_DOCUMENTATION: "Devolveu para ajustes",
+  APPROVE_EXPENSE: "Aprovou solicitação",
+  REJECT_EXPENSE: "Recusou solicitação",
+  UPDATE_EXPENSE: "Atualizou solicitação",
+  DELETE_EXPENSE: "Excluiu solicitação",
   UPDATE_USER: "Atualizou acesso de usuário",
+  ATTACH_PROOF: "Anexou recibo de pagamento",
+  PROGRESS_EXPENSE: "Colocou em andamento",
+  COMPLETE_EXPENSE: "Finalizou solicitação",
+  CANCEL_EXPENSE: "Cancelou solicitação",
 };
 
 export const EMAIL_KIND_LABEL: Record<EmailLogKind, string> = {

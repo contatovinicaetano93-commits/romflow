@@ -67,10 +67,33 @@ export const invitationCompanies = pgTable(
   (table) => [primaryKey({ columns: [table.invitationId, table.companyId] })],
 );
 
+export const userAreas = pgTable(
+  "user_areas",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    area: text("area").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.area] })],
+);
+
+export const invitationAreas = pgTable(
+  "invitation_areas",
+  {
+    invitationId: text("invitation_id")
+      .notNull()
+      .references(() => invitations.id, { onDelete: "cascade" }),
+    area: text("area").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.invitationId, table.area] })],
+);
+
 export const expenses = pgTable("expenses", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
+  area: text("area").notNull().default("financeiro"),
   expenseType: text("expense_type").notNull(),
   eventProject: text("event_project").notNull().default(""),
   amount: doublePrecision("amount").notNull(),
@@ -84,6 +107,7 @@ export const expenses = pgTable("expenses", {
   account: text("account").notNull().default(""),
   boletoCode: text("boleto_code").notNull().default(""),
   maxPaymentDate: text("max_payment_date").notNull(),
+  paymentDateJustification: text("payment_date_justification").notNull().default(""),
   receiptJustification: text("receipt_justification").notNull().default(""),
   receipt: jsonb("receipt").$type<StoredFile | null>(),
   paymentProof: jsonb("payment_proof").$type<StoredFile | null>(),

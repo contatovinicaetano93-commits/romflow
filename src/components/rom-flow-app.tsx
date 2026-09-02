@@ -8,6 +8,7 @@ import { CompanySelect } from "@/components/company-select";
 import { Dashboard } from "@/components/dashboard";
 import { ExpenseDrawer } from "@/components/expense-drawer";
 import { ExpenseForm } from "@/components/expense-form";
+import { TicketForm } from "@/components/ticket-form";
 import { ExpenseList } from "@/components/expense-list";
 import { FinancePage } from "@/components/finance-page";
 import { InvitePage } from "@/components/invite-page";
@@ -17,8 +18,9 @@ import { SettingsPage } from "@/components/settings-page";
 import { UsersPage } from "@/components/users-page";
 import { KINDNESS_PHRASES } from "@/lib/format";
 import { useStore } from "@/lib/store";
-import type { Expense, Screen } from "@/lib/types";
+import type { Expense, RequestArea, Screen } from "@/lib/types";
 import { assertNever } from "@/lib/types";
+import { homeScreen } from "@/lib/workflow";
 
 export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const store = useStore();
@@ -67,7 +69,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
 
   const navigate = useCallback(
     (next: Screen) => {
-      if (store.user && !canAccessScreen(store.user.role, next)) {
+      if (store.user && !canAccessScreen(store.user, next)) {
         return;
       }
       setScreen(next);
@@ -118,7 +120,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }}
         onLogin={async (email, password) => {
           const session = await store.login(email, password);
-          setScreen(session.role === "solicitante" ? "expenses" : "dashboard");
+          setScreen(homeScreen(session.role));
         }}
       />
     );
@@ -141,9 +143,10 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
       <CompanySelect
         user={store.user}
         companies={accessibleCompanies}
+        expenses={store.db.expenses}
         onSelect={(id) => {
           store.selectCompany(id);
-          setScreen(store.user?.role === "solicitante" ? "expenses" : "dashboard");
+          setScreen(homeScreen(store.user?.role ?? "solicitante"));
         }}
         onLogout={store.logout}
       />
@@ -151,19 +154,15 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   }
 
   const companyNames = Object.fromEntries(store.db.companies.map((item) => [item.id, item.name]));
-  const visibleScreen = canAccessScreen(store.user.role, screen)
+  const visibleScreen = store.user && canAccessScreen(store.user, screen)
     ? screen
-    : store.user.role === "solicitante"
-      ? "expenses"
-      : "dashboard";
+    : homeScreen(store.user.role);
 
   function renderScreen(current: Screen) {
     const role = store.user!.role;
-    const resolved = canAccessScreen(role, current)
+    const resolved = canAccessScreen(store.user!, current)
       ? current
-      : role === "solicitante"
-        ? "expenses"
-        : "dashboard";
+      : homeScreen(role);
     switch (resolved) {
       case "dashboard":
         return (
@@ -206,20 +205,47 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onOpen={setSelected}
           />
         );
-      case "new-expense":
+      case "new-financeiro":
+      case "new-manutencao":
+      case "new-compras":
+      case "new-rh": {
+        const area: RequestArea =
+          resolved === "new-financeiro"
+            ? "financeiro"
+            : resolved === "new-manutencao"
+              ? "manutencao"
+              : resolved === "new-compras"
+                ? "compras"
+                : "rh";
+        const back = store.user!.role === "solicitante" ? "expenses" : "my-expenses";
+        if (area === "financeiro") {
+          return (
+            <ExpenseForm
+              company={store.company!}
+              user={store.user!}
+              categories={store.db.categories}
+              greetingPhrase={greeting}
+              onCancel={() => navigate(back)}
+              onCreated={async (input) => {
+                await store.createExpense(input);
+                navigate(back);
+              }}
+            />
+          );
+        }
         return (
-          <ExpenseForm
+          <TicketForm
+            area={area}
             company={store.company!}
             user={store.user!}
-            categories={store.db.categories}
-            greetingPhrase={greeting}
-            onCancel={() => navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses")}
+            onCancel={() => navigate(back)}
             onCreated={async (input) => {
               await store.createExpense(input);
-              navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses");
+              navigate(back);
             }}
           />
         );
+      }
       case "approvals":
         return (
           <FinancePage
@@ -287,6 +313,18 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           closePopovers();
           store.switchCompany();
         }}
+        onBack={() => {
+          closePopovers();
+          const home = homeScreen(store.user!.role);
+          if (visibleScreen !== home) {
+            navigate(home);
+            return;
+          }
+          store.switchCompany();
+        }}
+        onReload={() => {
+          void store.reload();
+        }}
         onLogout={async () => {
           await store.logout();
           setLoginBanner("");
@@ -312,7 +350,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           expense={store.db.expenses.find((item) => item.id === selected.id) ?? selected}
           requester={store.findUser(selected.requester)}
           companyName={store.findCompany(selected.company)?.name ?? store.company.name}
-          role={store.user.role}
+          user={store.user}
           onClose={() => setSelected(null)}
           onAction={async (action, payload) => {
             await store.applyFinanceAction(selected.id, action, payload);

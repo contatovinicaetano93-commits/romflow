@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  Camera,
   Check,
   FileText,
   Landmark,
@@ -34,6 +35,7 @@ import type {
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
+import { daysFromToday, defaultPaymentDate, isReimbursement } from "@/lib/workflow";
 
 const STEPS = [
   { title: "Dados básicos", caption: "Sobre a despesa" },
@@ -42,7 +44,12 @@ const STEPS = [
   { title: "Revisão", caption: "Confirmar envio" },
 ];
 
-const TYPES: ExpenseType[] = ["fornecedor", "reembolso", "adiantamento", "impostos", "outros"];
+const TYPES: ExpenseType[] = [
+  "fornecedor",
+  "reembolso_colaborador",
+  "reembolso_cliente",
+  "outros",
+];
 const METHODS: PaymentMethod[] = ["pix", "ted", "boleto"];
 
 export function ExpenseForm({
@@ -69,6 +76,7 @@ export function ExpenseForm({
   const [dragging, setDragging] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const activeCategories = categories.filter((item) => item.is_active);
   const categoryChoices =
     activeCategories.length > 0
@@ -94,7 +102,8 @@ export function ExpenseForm({
     agency: "",
     account: "",
     boleto_code: "",
-    max_payment_date: new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10),
+    max_payment_date: defaultPaymentDate("fornecedor"),
+    payment_date_justification: "",
     receipt_justification: "",
   }));
   const [now] = useState(() => Date.now());
@@ -112,9 +121,19 @@ export function ExpenseForm({
     return { label: "Prazo confortável", detail: `${days} dias para pagamento`, tone: "green" };
   }, [form.max_payment_date, now]);
 
+  const needsDateJustification =
+    isReimbursement(form.expense_type) || daysFromToday(form.max_payment_date) < 15;
+  const dateCap = isReimbursement(form.expense_type) ? defaultPaymentDate(form.expense_type) : undefined;
+
   const canContinue =
     step === 0
-      ? Boolean(form.title && form.description && form.amount && form.max_payment_date)
+      ? Boolean(
+          form.title &&
+            form.description &&
+            form.amount &&
+            form.max_payment_date &&
+            (!needsDateJustification || form.payment_date_justification.trim()),
+        )
       : step === 1
         ? Boolean(
             form.beneficiary_name &&
@@ -170,6 +189,7 @@ export function ExpenseForm({
       await onCreated({
         title: form.title,
         description: form.description,
+        area: "financeiro",
         expense_type: form.expense_type,
         event_project: form.event_project,
         amount: parseMoneyInput(form.amount),
@@ -183,13 +203,14 @@ export function ExpenseForm({
         account: form.account,
         boleto_code: form.boleto_code,
         max_payment_date: form.max_payment_date,
+        payment_date_justification: form.payment_date_justification,
         receipt_justification: form.receipt_justification,
         receipt: receiptStored,
         payment_proof: null,
         company: company.id,
         requester: user.id,
         approver: null,
-        status: "enviada",
+        status: "em_analise",
         scheduled_date: null,
         review_note: "",
       });
@@ -287,7 +308,14 @@ export function ExpenseForm({
                 Tipo
                 <select
                   value={form.expense_type}
-                  onChange={(event) => setField("expense_type", event.target.value as ExpenseType)}
+                  onChange={(event) => {
+                    const next = event.target.value as ExpenseType;
+                    setForm((current) => ({
+                      ...current,
+                      expense_type: next,
+                      max_payment_date: defaultPaymentDate(next),
+                    }));
+                  }}
                 >
                   {TYPES.map((type) => (
                     <option key={type} value={type}>
@@ -326,17 +354,33 @@ export function ExpenseForm({
                 </div>
               </label>
               <label>
-                Prazo máximo de pagamento <span>*</span>
+                Data de pagamento <span>*</span>
                 <div className="date-input">
                   <CalendarDays size={16} />
                   <input
                     type="date"
                     value={form.max_payment_date}
+                    max={dateCap}
                     onChange={(event) => setField("max_payment_date", event.target.value)}
                     required
                   />
                 </div>
               </label>
+              {needsDateJustification ? (
+                <label className="full-field">
+                  Justificativa da data de pagamento <span>*</span>
+                  <textarea
+                    value={form.payment_date_justification}
+                    onChange={(event) => setField("payment_date_justification", event.target.value)}
+                    placeholder={
+                      isReimbursement(form.expense_type)
+                        ? "Reembolso: data em até 5 dias. Explique o motivo."
+                        : "Explique por que a data é inferior a 15 dias."
+                    }
+                    required
+                  />
+                </label>
+              ) : null}
               <span className={`urgency-pill urgency-${urgency.tone}`}>
                 <i /> <strong>{urgency.label}</strong> {urgency.detail}
               </span>
@@ -454,33 +498,51 @@ export function ExpenseForm({
                 <p>Anexe a nota fiscal ou informe por que ela ainda não está disponível.</p>
               </div>
             </div>
-            <button
-              type="button"
-              className={cls("upload-zone", dragging && "dragging")}
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragging(false);
-                handleFile(event.dataTransfer.files[0] ?? null);
-              }}
-            >
-              <span>
-                <Upload size={22} />
-              </span>
-              <strong>Arraste a nota fiscal para cá</strong>
-              <p>ou clique para selecionar o arquivo</p>
-              <small>PDF, JPG, PNG ou WEBP • até 10 MB</small>
-            </button>
+            <div className="form-footer-split">
+              <button
+                type="button"
+                className={cls("upload-zone", dragging && "dragging")}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  handleFile(event.dataTransfer.files[0] ?? null);
+                }}
+              >
+                <span>
+                  <Upload size={22} />
+                </span>
+                <strong>Arraste a nota fiscal para cá</strong>
+                <p>ou clique para selecionar o arquivo</p>
+                <small>PDF, JPG, PNG ou WEBP • até 10 MB</small>
+              </button>
+              <button type="button" className="upload-zone" onClick={() => cameraRef.current?.click()}>
+                <span>
+                  <Camera size={22} />
+                </span>
+                <strong>Tirar foto</strong>
+                <p>Use a câmera do celular</p>
+                <small>JPG ou PNG • até 10 MB</small>
+              </button>
+            </div>
             <input
               ref={fileRef}
               type="file"
               hidden
               accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
+            />
+            <input
+              ref={cameraRef}
+              type="file"
+              hidden
+              accept="image/*"
+              capture="environment"
               onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
             />
             {preparingFile ? (
@@ -551,7 +613,7 @@ export function ExpenseForm({
                 <span>{PAYMENT_METHOD_LABEL[form.payment_method]}</span>
               </div>
               <div>
-                <small>Prazo máximo</small>
+                <small>Data de pagamento</small>
                 <strong>{formatDate(form.max_payment_date)}</strong>
                 <span>{urgency.detail}</span>
               </div>

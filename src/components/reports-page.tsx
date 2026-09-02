@@ -5,13 +5,14 @@ import { STATUS_LABEL, money } from "@/lib/format";
 import type { Category, Expense, ExpenseStatus } from "@/lib/types";
 
 const STATUS_ORDER: ExpenseStatus[] = [
-  "enviada",
   "em_analise",
-  "aguardando_documentacao",
+  "devolvido",
   "aprovada",
-  "agendada",
-  "paga",
   "recusada",
+  "aberta",
+  "em_andamento",
+  "finalizada",
+  "cancelada",
 ];
 
 export function ReportsPage({
@@ -22,7 +23,7 @@ export function ReportsPage({
   categories: Category[];
 }) {
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
-  const paid = expenses.filter((item) => item.status === "paga");
+  const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "aprovada");
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const ticket = expenses.length ? total / expenses.length : 0;
   const categories = categoryOptions.map((item) => {

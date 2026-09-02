@@ -9,32 +9,17 @@ function eventCopy(action: "created" | FinanceAction): { subject: string; headli
     case "created":
       return {
         subject: "Nova solicitação",
-        headline: "Uma solicitação de pagamento foi registrada no ROM Flow.",
-      };
-    case "review":
-      return {
-        subject: "Solicitação em análise",
-        headline: "A solicitação entrou em análise pelo financeiro.",
+        headline: "Uma solicitação foi registrada no ROM Flow.",
       };
     case "docs":
       return {
-        subject: "Documentos solicitados",
-        headline: "O financeiro pediu documentos complementares.",
+        subject: "Solicitação devolvida",
+        headline: "A solicitação voltou para ajustes.",
       };
     case "approve":
       return {
         subject: "Solicitação aprovada",
         headline: "A solicitação foi aprovada.",
-      };
-    case "schedule":
-      return {
-        subject: "Pagamento agendado",
-        headline: "O pagamento foi agendado.",
-      };
-    case "pay":
-      return {
-        subject: "Pagamento concluído",
-        headline: "O pagamento foi marcado como pago.",
       };
     case "reject":
       return {
@@ -44,7 +29,27 @@ function eventCopy(action: "created" | FinanceAction): { subject: string; headli
     case "resubmit":
       return {
         subject: "Solicitação reenviada",
-        headline: "O solicitante reenviou a solicitação com os documentos.",
+        headline: "O solicitante reenviou a solicitação.",
+      };
+    case "attach_proof":
+      return {
+        subject: "Recibo de pagamento anexado",
+        headline: "O recibo de pagamento foi anexado à solicitação.",
+      };
+    case "progress":
+      return {
+        subject: "Solicitação em andamento",
+        headline: "A solicitação avançou para em andamento.",
+      };
+    case "complete":
+      return {
+        subject: "Solicitação finalizada",
+        headline: "A solicitação foi finalizada.",
+      };
+    case "cancel":
+      return {
+        subject: "Solicitação cancelada",
+        headline: "A solicitação foi cancelada.",
       };
     default:
       return assertNever(action);
@@ -58,7 +63,11 @@ export async function notifyExpenseChange(input: {
   action: "created" | FinanceAction;
 }): Promise<void> {
   const copy = eventCopy(input.action);
-  const recipients = await listNotificationRecipients(input.expense.company, input.expense.requester);
+  const recipients = await listNotificationRecipients(
+    input.expense.company,
+    input.expense.requester,
+    input.expense.area,
+  );
   const note = input.expense.review_note.trim();
   const href = appUrl();
   const company = escapeHtml(input.companyName);

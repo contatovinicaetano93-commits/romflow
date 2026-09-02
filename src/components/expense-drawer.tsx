@@ -4,20 +4,15 @@ import { FormEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Ban,
-  Building2,
-  CalendarDays,
   CheckCircle2,
-  Clock3,
   Download,
   FileText,
-  FolderOpen,
   RotateCcw,
-  Sparkles,
   Upload,
-  UserRound,
   X,
 } from "lucide-react";
 import {
+  AREA_LABEL,
   EXPENSE_TYPE_LABEL,
   PAYMENT_METHOD_LABEL,
   cls,
@@ -25,59 +20,35 @@ import {
   formatDateTime,
   money,
 } from "@/lib/format";
-import type {
-  Expense,
-  ExpenseStatus,
-  FinanceAction,
-  FinanceActionPayload,
-  Role,
-  User,
-} from "@/lib/types";
+import type { Expense, FinanceAction, FinanceActionPayload, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
+import { allowedActions } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
-
-const FLOW: ExpenseStatus[] = [
-  "enviada",
-  "em_analise",
-  "aguardando_documentacao",
-  "aprovada",
-  "agendada",
-  "paga",
-];
 
 export function ExpenseDrawer({
   expense,
   requester,
   companyName,
-  role,
+  user,
   onClose,
   onAction,
 }: {
   expense: Expense;
   requester?: User;
   companyName: string;
-  role: Role;
+  user: User;
   onClose: () => void;
   onAction: (action: FinanceAction, payload?: FinanceActionPayload) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<FinanceAction | null>(null);
   const [note, setNote] = useState("");
-  const [scheduledDate, setScheduledDate] = useState(
-    expense.scheduled_date ?? new Date().toISOString().slice(0, 10),
-  );
   const [proof, setProof] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const canManage = role === "admin" || role === "financeiro";
-
-  function statusIndex(status: ExpenseStatus): number {
-    if (status === "recusada") {
-      return -1;
-    }
-    return FLOW.indexOf(status);
-  }
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const actions = allowedActions(user, expense);
 
   async function confirm(event: FormEvent) {
     event.preventDefault();
@@ -87,18 +58,15 @@ export function ExpenseDrawer({
     setBusy(true);
     setError("");
     try {
-      if ((modal === "reject" || modal === "docs") && note.trim().length < 10) {
-        throw new Error("Descreva o motivo com pelo menos 10 caracteres.");
+      if ((modal === "reject" || modal === "docs") && !note.trim()) {
+        throw new Error("Informe a justificativa.");
       }
       const stored = proof ? await fileToStored(proof) : null;
       const payload: FinanceActionPayload = {};
       if (modal === "reject" || modal === "docs") {
         payload.note = note.trim();
       }
-      if (modal === "schedule") {
-        payload.scheduledDate = scheduledDate;
-      }
-      if (modal === "pay") {
+      if (modal === "attach_proof") {
         payload.proof = stored;
       }
       if (modal === "resubmit") {
@@ -117,47 +85,26 @@ export function ExpenseDrawer({
 
   function modalTitle(action: FinanceAction): string {
     switch (action) {
-      case "review":
-        return "Iniciar análise";
       case "docs":
-        return "Devolver Solicitação para Ajustes";
+        return "Devolver solicitação";
       case "approve":
-        return "Aprovar Solicitação";
-      case "schedule":
-        return "Agendar Data de Pagamento";
-      case "pay":
-        return "Confirmar Pagamento & Anexar Comprovante";
+        return "Aprovar solicitação";
       case "reject":
-        return "Recusar Solicitação";
+        return expense.area === "manutencao" ? "Encerrar / recusar chamado" : "Recusar solicitação";
       case "resubmit":
         return "Reenviar documentação";
+      case "attach_proof":
+        return "Anexar recibo de pagamento";
+      case "progress":
+        return "Marcar em andamento";
+      case "complete":
+        return "Finalizar solicitação";
+      case "cancel":
+        return "Cancelar solicitação";
       default:
         return assertNever(action);
     }
   }
-
-  function confirmLabel(action: FinanceAction): string {
-    switch (action) {
-      case "review":
-        return "Confirmar ação";
-      case "docs":
-        return "Confirmar Devolução";
-      case "approve":
-        return "Aprovar Solicitação";
-      case "schedule":
-        return "Confirmar Agendamento";
-      case "pay":
-        return "Concluir & Liberar Comprovante";
-      case "reject":
-        return "Confirmar Recusa";
-      case "resubmit":
-        return "Reenviar solicitação";
-      default:
-        return assertNever(action);
-    }
-  }
-
-  const currentIndex = statusIndex(expense.status);
 
   return (
     <div className="drawer-layer">
@@ -165,7 +112,9 @@ export function ExpenseDrawer({
       <aside className="details-drawer">
         <header className="drawer-header">
           <div>
-            <div className="drawer-header-tag">Solicitação #{expense.id.slice(-6).toUpperCase()}</div>
+            <div className="drawer-header-tag">
+              {AREA_LABEL[expense.area]} #{expense.id.slice(-6).toUpperCase()}
+            </div>
             <h2>{expense.title}</h2>
           </div>
           <button className="close-btn" onClick={onClose} aria-label="Fechar">
@@ -173,376 +122,162 @@ export function ExpenseDrawer({
           </button>
         </header>
         <div className="drawer-body">
-          {expense.status === "paga" ? (
-            <div className="details-alert success">Pagamento efetuado com comprovante</div>
+          {expense.status === "recusada" || expense.status === "cancelada" ? (
+            <div className="details-alert error">{expense.review_note || "Solicitação recusada"}</div>
           ) : null}
-          {expense.status === "recusada" ? (
-            <div className="details-alert error">Solicitação Recusada</div>
-          ) : null}
-          {expense.status === "aguardando_documentacao" ? (
+          {expense.status === "devolvido" ? (
             <div className="details-alert">
               {expense.review_note || "Devolvido para ajustes. Anexe os documentos e reenvie."}
             </div>
           ) : null}
+          {expense.payment_proof ? (
+            <div className="details-alert success">Recibo de pagamento anexado</div>
+          ) : null}
           <div className="details-hero">
             <div className="hero-top-row">
               <StatusBadge status={expense.status} />
-              <span className="hero-date">{formatDate(expense.max_payment_date)}</span>
-            </div>
-            <strong>{money(expense.amount)}</strong>
-            {expense.scheduled_date ? (
-              <span className="hero-scheduled-badge">
-                <CalendarDays size={14} /> Agendado para {formatDate(expense.scheduled_date)}
-              </span>
-            ) : null}
-          </div>
-
-          {canManage ? (
-            <div className="finance-actions-section">
-              <div className="section-header-row">
-                <h3>Ações do Financeiro</h3>
-                <span className="role-pill">Controle de Fluxo</span>
-              </div>
-              <div className="finance-action-buttons">
-                <button
-                  className="action-pill-btn review"
-                  type="button"
-                  disabled={!["enviada", "aguardando_documentacao"].includes(expense.status)}
-                  onClick={() => setModal("review")}
-                >
-                  <Clock3 size={16} /> Em análise
-                </button>
-                <button
-                  className="action-pill-btn return"
-                  type="button"
-                  disabled={!["enviada", "em_analise"].includes(expense.status)}
-                  onClick={() => setModal("docs")}
-                >
-                  <RotateCcw size={16} /> Devolver
-                </button>
-                <button
-                  className="action-pill-btn approve"
-                  type="button"
-                  disabled={!["enviada", "em_analise", "aguardando_documentacao"].includes(expense.status)}
-                  onClick={() => setModal("approve")}
-                >
-                  <CheckCircle2 size={16} /> Aprovar
-                </button>
-                <button
-                  className="action-pill-btn schedule"
-                  type="button"
-                  disabled={!["aprovada"].includes(expense.status)}
-                  onClick={() => setModal("schedule")}
-                >
-                  <CalendarDays size={16} /> Agendar
-                </button>
-                <button
-                  className="action-pill-btn pay"
-                  type="button"
-                  disabled={!["aprovada", "agendada"].includes(expense.status)}
-                  onClick={() => setModal("pay")}
-                >
-                  <CheckCircle2 size={16} /> Pagar
-                </button>
-                <button
-                  className="action-pill-btn reject"
-                  type="button"
-                  disabled={expense.status === "paga" || expense.status === "recusada"}
-                  onClick={() => {
-                    setError("");
-                    setNote("");
-                    setModal("reject");
-                  }}
-                >
-                  <Ban size={16} /> Recusar
-                </button>
-              </div>
-              <div className="secondary-flow-actions">
-                <button
-                  className="btn-request-docs"
-                  type="button"
-                  disabled={expense.status === "paga" || expense.status === "recusada"}
-                  onClick={() => {
-                    setError("");
-                    setNote("");
-                    setModal("docs");
-                  }}
-                >
-                  Solicitar documentos
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {expense.status === "aguardando_documentacao" ? (
-            <div className="finance-actions-section">
-              <div className="section-header-row">
-                <h3>Ajustar documentação</h3>
-              </div>
-              <button className="primary-button" type="button" onClick={() => setModal("resubmit")}>
-                <Upload size={16} /> Anexar e reenviar
-              </button>
-            </div>
-          ) : null}
-
-          <div className="details-section">
-            <h3>Dados da despesa</h3>
-            <div className="detail-cards-grid">
-              <div className="detail-card">
-                <FolderOpen className="card-icon" size={20} />
-                <div className="card-content">
-                  <small>Categoria</small>
-                  <strong>{expense.category}</strong>
-                </div>
-              </div>
-              <div className="detail-card">
-                <Building2 className="card-icon" size={20} />
-                <div className="card-content">
-                  <small>Empresa</small>
-                  <strong>{companyName}</strong>
-                </div>
-              </div>
-              <div className="detail-card">
-                <UserRound className="card-icon" size={20} />
-                <div className="card-content">
-                  <small>Solicitante</small>
-                  <strong>{requester?.name ?? "—"}</strong>
-                </div>
-              </div>
-              <div className="detail-card">
-                <Sparkles className="card-icon" size={20} />
-                <div className="card-content">
-                  <small>Evento / Projeto</small>
-                  <strong>{expense.event_project || "—"}</strong>
-                </div>
-              </div>
-            </div>
-            <p className="expense-description-text">{expense.description}</p>
-          </div>
-
-          <div className="details-section">
-            <h3>Beneficiário</h3>
-            <div className="beneficiary-table-card">
-              <div className="beneficiary-table-row">
-                <div className="beneficiary-cell">
-                  <small>Nome / Razão social</small>
-                  <strong>{expense.beneficiary_name}</strong>
-                </div>
-                <div className="beneficiary-cell">
-                  <small>Forma de pagamento</small>
-                  <strong>{PAYMENT_METHOD_LABEL[expense.payment_method]}</strong>
-                </div>
-              </div>
-              <div className="beneficiary-table-row border-top">
-                <div className="beneficiary-cell">
-                  <small>Documento</small>
-                  <strong>{expense.beneficiary_document || "—"}</strong>
-                </div>
-                <div className="beneficiary-cell">
-                  <small>Chave / Conta</small>
-                  <strong>
-                    {expense.pix_key ||
-                      expense.boleto_code ||
-                      [expense.agency, expense.account].filter(Boolean).join(" / ") ||
-                      "—"}
-                  </strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="details-section">
-            <div className="section-header-row">
-              <h3>Documentos</h3>
-              {expense.payment_proof ? (
-                <span className="proof-ready-badge">
-                  <CheckCircle2 size={14} /> Comprovante
-                </span>
+              {expense.area === "financeiro" ? (
+                <span className="hero-date">{formatDate(expense.max_payment_date)}</span>
               ) : null}
             </div>
-            {expense.receipt ? (
-              <div className="document-item-card">
-                <div className="doc-icon-wrap">
-                  <FileText className="text-violet" size={18} />
-                </div>
-                <div className="doc-meta">
-                  <strong title={expense.receipt.name}>{expense.receipt.name}</strong>
-                  <small>Nota fiscal / documento</small>
-                </div>
-                <div className="doc-actions">
-                  {expense.receipt.dataUrl ? (
-                    <a
-                      className="doc-action-btn download"
-                      href={expense.receipt.dataUrl}
-                      download={expense.receipt.name}
-                    >
-                      <Download size={16} />
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div className="empty-docs-box">
-                <FileText size={18} />
-                {expense.receipt_justification || "Nenhum documento anexado para esta solicitação."}
-              </div>
-            )}
-            {expense.payment_proof ? (
-              <div className="document-item-card proof-card">
-                <div className="doc-icon-wrap proof">
-                  <FileText className="text-emerald" size={18} />
-                </div>
-                <div className="doc-meta">
-                  <strong title={expense.payment_proof.name}>{expense.payment_proof.name}</strong>
-                  <small className="text-emerald">Comprovante de pagamento oficial</small>
-                </div>
-              </div>
-            ) : null}
+            <strong>{money(expense.amount)}</strong>
           </div>
 
-          <div className="details-section">
-            <h3>Linha do tempo & Histórico</h3>
-            {expense.status === "recusada" ? (
-              <div className="timeline-step">
-                <div className="step-indicator reject">
-                  <Ban size={14} />
-                </div>
-                <div className="step-body">
-                  <strong>Solicitação Recusada</strong>
-                  <small>{expense.review_note || formatDateTime(expense.updated)}</small>
-                </div>
+          {actions.length > 0 ? (
+            <div className="finance-actions-section">
+              <div className="section-header-row">
+                <h3>Ações</h3>
               </div>
+              <div className="finance-action-buttons">
+                {actions.includes("progress") ? (
+                  <button className="action-pill-btn review" type="button" onClick={() => onAction("progress")}>
+                    Em andamento
+                  </button>
+                ) : null}
+                {actions.includes("complete") ? (
+                  <button className="action-pill-btn approve" type="button" onClick={() => onAction("complete")}>
+                    <CheckCircle2 size={16} /> Finalizar
+                  </button>
+                ) : null}
+                {actions.includes("cancel") ? (
+                  <button className="action-pill-btn reject" type="button" onClick={() => onAction("cancel")}>
+                    Cancelar
+                  </button>
+                ) : null}
+                {actions.includes("docs") ? (
+                  <button className="action-pill-btn return" type="button" onClick={() => { setNote(""); setModal("docs"); }}>
+                    <RotateCcw size={16} /> Devolver
+                  </button>
+                ) : null}
+                {actions.includes("approve") ? (
+                  <button className="action-pill-btn approve" type="button" onClick={() => setModal("approve")}>
+                    <CheckCircle2 size={16} /> Aprovar
+                  </button>
+                ) : null}
+                {actions.includes("attach_proof") ? (
+                  <button className="action-pill-btn pay" type="button" onClick={() => setModal("attach_proof")}>
+                    Anexar recibo
+                  </button>
+                ) : null}
+                {actions.includes("reject") ? (
+                  <button className="action-pill-btn reject" type="button" onClick={() => { setNote(""); setModal("reject"); }}>
+                    <Ban size={16} /> Recusar
+                  </button>
+                ) : null}
+                {actions.includes("resubmit") ? (
+                  <button className="action-pill-btn review" type="button" onClick={() => setModal("resubmit")}>
+                    Reenviar
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="details-block">
+            <h3>Detalhes</h3>
+            <p>{expense.description}</p>
+            <p>
+              <small>Tipo</small> {EXPENSE_TYPE_LABEL[expense.expense_type]}
+            </p>
+            {expense.event_project ? (
+              <p>
+                <small>Complemento</small> {expense.event_project}
+              </p>
             ) : null}
-            {FLOW.map((status, index) => {
-              const completed = currentIndex >= index && expense.status !== "recusada";
-              const current = currentIndex === index;
-              return (
-                <div
-                  className={cls("timeline-step", completed && "completed", current && "current")}
-                  key={status}
-                >
-                  <div className="step-indicator">
-                    {current && !completed ? <i className="dot-pulse" /> : index + 1}
-                  </div>
-                  <div className="step-body">
-                    <strong>
-                      {status === "enviada"
-                        ? "Solicitação enviada"
-                        : status === "em_analise"
-                          ? "Em análise"
-                          : status === "aguardando_documentacao"
-                            ? "Devolvido para ajustes"
-                            : status === "aprovada"
-                              ? "Aprovado pelo financeiro"
-                              : status === "agendada"
-                                ? "Agendado"
-                                : "Concluída"}
-                    </strong>
-                    <small>
-                      {status === "aguardando_documentacao" && expense.review_note
-                        ? expense.review_note
-                        : status === "paga" && expense.status === "paga"
-                          ? "Pagamento efetuado com comprovante"
-                          : EXPENSE_TYPE_LABEL[expense.expense_type]}
-                    </small>
-                  </div>
-                </div>
-              );
-            })}
+            <p>
+              <small>Solicitante</small> {requester?.name ?? "—"}
+            </p>
+            <p>
+              <small>Empresa</small> {companyName}
+            </p>
+            {expense.area === "financeiro" ? (
+              <>
+                <p>
+                  <small>Data de pagamento</small> {formatDate(expense.max_payment_date)}
+                </p>
+                {expense.payment_date_justification ? (
+                  <p>
+                    <small>Justificativa da data</small> {expense.payment_date_justification}
+                  </p>
+                ) : null}
+                <p>
+                  <small>Beneficiário</small> {expense.beneficiary_name} · {PAYMENT_METHOD_LABEL[expense.payment_method]}
+                </p>
+              </>
+            ) : null}
+            {expense.receipt ? (
+              <a href={expense.receipt.dataUrl} download={expense.receipt.name}>
+                <Download size={14} /> {expense.receipt.name}
+              </a>
+            ) : (
+              <p>{expense.receipt_justification || "Sem documento anexado."}</p>
+            )}
+            {expense.payment_proof ? (
+              <p>
+                <FileText size={14} /> Recibo:{" "}
+                <a href={expense.payment_proof.dataUrl} download={expense.payment_proof.name}>
+                  {expense.payment_proof.name}
+                </a>
+              </p>
+            ) : null}
+            <small>Atualizado em {formatDateTime(expense.updated)}</small>
           </div>
         </div>
       </aside>
-
       {modal
         ? createPortal(
-            <div className="flow-modal-layer">
-              <button
-                className="modal-overlay"
-                type="button"
-                onClick={() => setModal(null)}
-                aria-label="Fechar modal"
-              />
-              <form className="action-modal premium-modal" onSubmit={confirm}>
-                <header>
-                  <div
-                    className={`modal-icon ${modal === "reject" ? "red" : modal === "docs" || modal === "resubmit" ? "amber" : "emerald"}`}
-                  >
-                    {modal === "reject" ? <Ban size={20} /> : <CheckCircle2 size={20} />}
-                  </div>
-                  <div>
-                    <h3>{modalTitle(modal)}</h3>
-                    <p>{expense.title}</p>
-                  </div>
-                </header>
-                {modal === "reject" || modal === "docs" ? (
+            <div className="modal-layer">
+              <button className="drawer-overlay" aria-label="Fechar" onClick={() => setModal(null)} />
+              <form className="confirm-modal" onSubmit={confirm}>
+                <h3>{modalTitle(modal)}</h3>
+                {modal === "docs" || modal === "reject" ? (
                   <label>
-                    {modal === "docs"
-                      ? "Motivo da devolução / Instruções para o solicitante"
-                      : "Motivo da recusa"}{" "}
-                    <span>*</span>
-                    <textarea
-                      value={note}
-                      minLength={10}
-                      onChange={(event) => setNote(event.target.value)}
-                      required
-                    />
-                    <small className="signup-field-hint">
-                      {note.trim().length}/10 caracteres mínimos
-                    </small>
+                    Justificativa
+                    <textarea value={note} onChange={(event) => setNote(event.target.value)} required />
                   </label>
                 ) : null}
-                {modal === "schedule" ? (
-                  <label>
-                    Data de pagamento <span>*</span>
-                    <input
-                      type="date"
-                      value={scheduledDate}
-                      onChange={(event) => setScheduledDate(event.target.value)}
-                      required
-                    />
-                  </label>
-                ) : null}
-                {modal === "pay" || modal === "resubmit" ? (
-                  <label className="payment-upload" onClick={() => fileRef.current?.click()}>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
-                      hidden
-                      onChange={(event) => setProof(event.target.files?.[0] || null)}
-                    />
-                    <Upload size={22} />
-                    <strong>
-                      {proof?.name ||
-                        (modal === "pay" ? "Anexar comprovante final" : "Anexar documento solicitado")}
-                    </strong>
-                    <span>
-                      {modal === "pay"
-                        ? "Arquivo oficial que será liberado para o solicitante"
-                        : "Nota fiscal ou documento pedido pelo financeiro"}
-                    </span>
-                    <small>
-                      PDF ou imagem {modal === "pay" || !expense.receipt ? "• obrigatório" : ""}
-                    </small>
-                  </label>
+                {modal === "attach_proof" || modal === "resubmit" ? (
+                  <>
+                    <button type="button" className="secondary-button" onClick={() => fileRef.current?.click()}>
+                      <Upload size={16} /> Anexar arquivo
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => cameraRef.current?.click()}>
+                      Tirar foto
+                    </button>
+                    <input ref={fileRef} type="file" hidden accept="image/*,application/pdf" onChange={(event) => setProof(event.target.files?.[0] ?? null)} />
+                    <input ref={cameraRef} type="file" hidden accept="image/*" capture="environment" onChange={(event) => setProof(event.target.files?.[0] ?? null)} />
+                    {proof ? <small>{proof.name}</small> : null}
+                  </>
                 ) : null}
                 {error ? <div className="form-error">{error}</div> : null}
-                <footer>
-                  <button className="secondary-button" type="button" onClick={() => setModal(null)}>
+                <div className="form-footer">
+                  <button type="button" className="secondary-button" onClick={() => setModal(null)}>
                     Cancelar
                   </button>
-                  <button
-                    className={modal === "reject" ? "destructive-button" : "primary-button"}
-                    type="submit"
-                    disabled={
-                      busy ||
-                      (modal === "pay" && !proof) ||
-                      (modal === "resubmit" && !proof && !expense.receipt)
-                    }
-                  >
-                    {busy ? <span className="spinner" /> : confirmLabel(modal)}
+                  <button className={cls("primary-button", modal === "reject" && "destructive-button")} type="submit" disabled={busy}>
+                    Confirmar
                   </button>
-                </footer>
+                </div>
               </form>
             </div>,
             document.body,
