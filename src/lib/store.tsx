@@ -45,11 +45,19 @@ function syncSentryUser(user: User | null) {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const url =
+    method === "GET"
+      ? `${path}${path.includes("?") ? "&" : "?"}_ts=${Date.now()}`
+      : path;
+  const res = await fetch(url, {
     ...init,
+    method,
+    cache: "no-store",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store",
       ...(init?.headers ?? {}),
     },
   });
@@ -126,6 +134,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const snapshot = await api<Database>("/api/data");
     setDb(snapshot);
   }, [user]);
+
+  const reload = useCallback(async () => {
+    const session = await api<{ user: User | null; needsSetup: boolean }>("/api/auth/session");
+    setNeedsSetup(session.needsSetup);
+    setUser(session.user);
+    syncSentryUser(session.user);
+    if (!session.user) {
+      setCompany(null);
+      setDb(EMPTY_DB);
+      return;
+    }
+    if (company && !session.user.companyIds.includes(company.id)) {
+      setCompany(null);
+    }
+    await refreshData(session.user);
+  }, [company, refreshData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -387,7 +411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       logout,
       selectCompany,
       switchCompany,
-      reload: refreshData,
+      reload,
       accessibleCompanies,
       companyExpenses,
       createExpense,
@@ -424,7 +448,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ready,
       selectCompany,
       switchCompany,
-      refreshData,
+      reload,
       toggleUserStatus,
       updateCategory,
       updateInvitationAccess,

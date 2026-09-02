@@ -34,6 +34,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [inviteMode, setInviteMode] = useState(Boolean(inviteToken));
   const [loginBanner, setLoginBanner] = useState("");
+  const [reloading, setReloading] = useState(false);
+  const [viewEpoch, setViewEpoch] = useState(0);
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
   const accessibleCompanies = store.accessibleCompanies();
@@ -327,8 +329,22 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           store.switchCompany();
         }}
         onReload={() => {
-          void store.reload();
+          if (reloading) {
+            return;
+          }
+          closePopovers();
+          setSelected(null);
+          setReloading(true);
+          void store
+            .reload()
+            .then(() => {
+              setViewEpoch((value) => value + 1);
+            })
+            .finally(() => {
+              setReloading(false);
+            });
         }}
+        reloading={reloading}
         onLogout={async () => {
           await store.logout();
           setLoginBanner("");
@@ -346,7 +362,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }}
         onToggleMenu={() => setMenuOpen((value) => !value)}
       >
-        {renderScreen(visibleScreen)}
+        <div key={viewEpoch} className="screen-refresh-root">
+          {renderScreen(visibleScreen)}
+        </div>
       </AppShell>
       {selected &&
       (store.user.role !== "solicitante" || selected.requester === store.user.id) ? (

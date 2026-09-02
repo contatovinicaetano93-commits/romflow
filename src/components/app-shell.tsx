@@ -121,6 +121,7 @@ export function AppShell({
   onLogout,
   onBack,
   onReload,
+  reloading = false,
   notificationsOpen,
   profileOpen,
   menuOpen,
@@ -141,6 +142,7 @@ export function AppShell({
   onLogout: () => void;
   onBack: () => void;
   onReload: () => void;
+  reloading?: boolean;
   notificationsOpen: boolean;
   profileOpen: boolean;
   menuOpen: boolean;
@@ -242,7 +244,13 @@ export function AppShell({
             <button className="icon-button" onClick={onBack} aria-label="Voltar">
               <ArrowLeft size={18} />
             </button>
-            <button className="icon-button" onClick={onReload} aria-label="Atualizar página">
+            <button
+              className={cls("icon-button", reloading && "reloading")}
+              onClick={onReload}
+              aria-label="Atualizar página"
+              disabled={reloading}
+              type="button"
+            >
               <RefreshCw size={18} />
             </button>
             <div>

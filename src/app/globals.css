@@ -357,3 +357,16 @@ small {
     grid-template-columns: 1fr;
   }
 }
+
+.icon-button.reloading svg {
+  animation: spin 0.7s linear infinite;
+}
+
+.icon-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.screen-refresh-root {
+  display: contents;
+}
