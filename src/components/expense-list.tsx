@@ -2,9 +2,10 @@
 
 import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { daysUntil, formatDate, money, shortId } from "@/lib/format";
-import type { Expense, ExpenseStatus, Screen, User } from "@/lib/types";
-import { newRequestScreen } from "@/lib/workflow";
+import { AREA_LABEL, money, shortId } from "@/lib/format";
+import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/types";
+import { allowedActions, newRequestScreen } from "@/lib/workflow";
+import { MaintenanceStepper } from "./maintenance-stepper";
 import { StatusBadge } from "./status-badge";
 
 const STATUS_FILTERS: Array<{ value: "todos" | ExpenseStatus; label: string }> = [
@@ -30,6 +31,7 @@ export function ExpenseList({
   onSearch,
   onNavigate,
   onOpen,
+  onAction,
 }: {
   expenses: Expense[];
   search: string;
@@ -41,24 +43,42 @@ export function ExpenseList({
   onSearch: (value: string) => void;
   onNavigate: (screen: Screen) => void;
   onOpen: (expense: Expense) => void;
+  onAction?: (expense: Expense, action: FinanceAction) => void | Promise<void>;
 }) {
   const [status, setStatus] = useState<"todos" | ExpenseStatus>("todos");
-  const [category, setCategory] = useState("todas");
+  const [areaFilter, setAreaFilter] = useState<"todas" | RequestArea>("todas");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
 
   const filtered = useMemo(
     () =>
       expenses.filter((item) => {
-        const matchesSearch = `${item.title} ${item.beneficiary_name} ${item.category}`
+        const matchesSearch = `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]}`
           .toLowerCase()
           .includes(search.toLowerCase());
         const matchesStatus = status === "todos" || item.status === status;
-        const matchesCategory = category === "todas" || item.category === category;
-        return matchesSearch && matchesStatus && matchesCategory;
+        const matchesArea = areaFilter === "todas" || item.area === areaFilter;
+        return matchesSearch && matchesStatus && matchesArea;
       }),
-    [category, expenses, search, status],
+    [areaFilter, expenses, search, status],
   );
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
+  const hasMaintenance = expenses.some((item) => item.area === "manutencao");
+
+  async function run(item: Expense, action: FinanceAction) {
+    if (!onAction) {
+      onOpen(item);
+      return;
+    }
+    setBusyId(item.id);
+    try {
+      await onAction(item, action);
+      setConfirmCancel(null);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="page-stack">
@@ -90,8 +110,12 @@ export function ExpenseList({
         <div className="summary-status">
           <i />
           <p>
-            <strong>Status atualizado na ação</strong>
-            <small>Aprove, devolva ou recuse pelo detalhe</small>
+            <strong>{hasMaintenance ? "Manutenção: ande o status aqui" : "Abra o detalhe para decidir"}</strong>
+            <small>
+              {hasMaintenance
+                ? "Em andamento, finalizada ou cancelar no próprio chamado"
+                : "Aprove, devolva ou recuse pelo detalhe"}
+            </small>
           </p>
         </div>
       </section>
@@ -102,7 +126,7 @@ export function ExpenseList({
             <input
               value={search}
               onChange={(event) => onSearch(event.target.value)}
-              placeholder="Buscar solicitação, beneficiário ou categoria"
+              placeholder="Buscar solicitação"
             />
           </div>
           <label>
@@ -116,13 +140,15 @@ export function ExpenseList({
             </select>
           </label>
           <label>
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="todas">Todas as categorias</option>
-              <option>Viagem</option>
-              <option>Alimentação</option>
-              <option>Escritório</option>
-              <option>Software</option>
-              <option>Outros</option>
+            <select
+              value={areaFilter}
+              onChange={(event) => setAreaFilter(event.target.value as typeof areaFilter)}
+            >
+              <option value="todas">Todas as áreas</option>
+              <option value="financeiro">Financeiro</option>
+              <option value="manutencao">Manutenção</option>
+              <option value="compras">Compras</option>
+              <option value="rh">RH</option>
             </select>
           </label>
         </div>
@@ -135,8 +161,8 @@ export function ExpenseList({
             </strong>
             <span>
               {expenses.length === 0
-                ? "Crie a primeira solicitação para começar a testar o fluxo."
-                : "Ajuste os filtros ou faça um novo pedido de pagamento."}
+                ? "Crie a primeira solicitação para começar o fluxo."
+                : "Ajuste os filtros ou abra uma nova solicitação."}
             </span>
           </div>
         ) : (
@@ -145,40 +171,80 @@ export function ExpenseList({
               <thead>
                 <tr>
                   <th>Solicitação</th>
-                  <th>Empresa</th>
-                  <th>Data limite</th>
+                  <th>Área</th>
                   <th>Valor</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((item) => {
-                  const days = daysUntil(item.max_payment_date);
+                  const actions = allowedActions(user, item);
+                  const canWalk =
+                    item.area === "manutencao" &&
+                    (actions.includes("progress") ||
+                      actions.includes("complete") ||
+                      actions.includes("cancel"));
                   return (
                     <tr key={item.id}>
                       <td>
                         <button className="expense-main" type="button" onClick={() => onOpen(item)}>
-                          <span className="category-icon">{item.category.slice(0, 1)}</span>
+                          <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
                           <span>
                             <strong>{item.title}</strong>
                             <small>
-                              #{shortId(item.id)} • {item.beneficiary_name}
+                              #{shortId(item.id)}
+                              {companyNames[item.company] ? ` • ${companyNames[item.company]}` : ""}
+                              {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
                             </small>
                           </span>
                         </button>
                       </td>
                       <td>
-                        <span className="table-subline">{companyNames[item.company] || "—"}</span>
+                        <span className="table-subline">{AREA_LABEL[item.area]}</span>
                       </td>
+                      <td className="amount-cell">{item.amount > 0 ? money(item.amount) : "—"}</td>
                       <td>
-                        {formatDate(item.max_payment_date)}
-                        <small className="table-subline">
-                          {days < 0 ? "Prazo encerrado" : `${days} dias`}
-                        </small>
-                      </td>
-                      <td className="amount-cell">{money(item.amount)}</td>
-                      <td>
-                        <StatusBadge status={item.status} />
+                        {canWalk ? (
+                          <div className="list-status-actions">
+                            <StatusBadge status={item.status} />
+                            {confirmCancel === item.id ? (
+                              <div className="list-cancel-confirm">
+                                <button
+                                  type="button"
+                                  className="primary-button destructive-button"
+                                  disabled={busyId === item.id}
+                                  onClick={() => void run(item, "cancel")}
+                                >
+                                  Confirmar cancelamento
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() => setConfirmCancel(null)}
+                                >
+                                  Voltar
+                                </button>
+                              </div>
+                            ) : (
+                              <MaintenanceStepper
+                                expense={item}
+                                actions={actions}
+                                busy={busyId === item.id}
+                                onAction={(action) => {
+                                  if (action === "cancel") {
+                                    setConfirmCancel(item.id);
+                                    return;
+                                  }
+                                  void run(item, action);
+                                }}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <button type="button" className="status-open" onClick={() => onOpen(item)}>
+                            <StatusBadge status={item.status} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -247,3 +247,71 @@ small {
   overflow: visible;
   text-overflow: unset;
 }
+
+.maintenance-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.maintenance-step {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid #27272a;
+  background: #141417;
+  color: #71717a;
+}
+
+.maintenance-step.done {
+  color: #6ee7b7;
+  border-color: #10b98147;
+  background: #10b98114;
+}
+
+.maintenance-step.current {
+  color: #e4e4e7;
+  border-color: #3f3f46;
+  background: #1c1c20;
+}
+
+.maintenance-step.next {
+  cursor: pointer;
+  color: #052e16;
+  background: #10b981;
+  border-color: #10b981;
+}
+
+.maintenance-step.next:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.maintenance-step.cancel {
+  cursor: pointer;
+  color: #fecaca;
+  background: #ef44441a;
+  border-color: #ef444459;
+}
+
+.list-status-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.list-cancel-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}

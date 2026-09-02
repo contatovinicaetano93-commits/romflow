@@ -25,6 +25,7 @@ import type { Expense, FinanceAction, FinanceActionPayload, User } from "@/lib/t
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
 import { allowedActions } from "@/lib/workflow";
+import { MaintenanceStepper } from "./maintenance-stepper";
 import { StatusBadge } from "./status-badge";
 
 export function ExpenseDrawer({
@@ -59,6 +60,21 @@ export function ExpenseDrawer({
     setNote("");
     setProof(null);
     setModal(action);
+  }
+
+  async function runDirect(action: FinanceAction) {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await onAction(action);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível concluir a operação.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function confirm(event: FormEvent) {
@@ -208,6 +224,9 @@ export function ExpenseDrawer({
           {expense.status === "aprovada" ? (
             <div className="details-alert success">Solicitação aprovada</div>
           ) : null}
+          {expense.status === "finalizada" ? (
+            <div className="details-alert success">Chamado finalizado</div>
+          ) : null}
           {expense.payment_proof ? (
             <div className="details-alert success">Recibo de pagamento anexado</div>
           ) : null}
@@ -221,7 +240,42 @@ export function ExpenseDrawer({
             {expense.amount > 0 ? <strong>{money(expense.amount)}</strong> : <strong>{AREA_LABEL[expense.area]}</strong>}
           </div>
 
-          {actions.length > 0 ? (
+          {error && !modal ? <div className="form-error">{error}</div> : null}
+          {expense.area === "manutencao" ? (
+            <div className="finance-actions-section">
+              <div className="section-header-row">
+                <h3>Andamento do chamado</h3>
+              </div>
+              <MaintenanceStepper
+                expense={expense}
+                actions={actions}
+                busy={busy}
+                onAction={(action) => {
+                  if (action === "cancel") {
+                    openModal("cancel");
+                    return;
+                  }
+                  void runDirect(action);
+                }}
+              />
+              {actions.includes("reject") || actions.includes("attach_proof") ? (
+                <div className="finance-action-buttons" style={{ marginTop: 12 }}>
+                  {actions.includes("attach_proof") ? (
+                    <button className="action-pill-btn pay" type="button" disabled={busy} onClick={() => openModal("attach_proof")}>
+                      Anexar recibo
+                    </button>
+                  ) : null}
+                  {actions.includes("reject") ? (
+                    <button className="action-pill-btn reject" type="button" disabled={busy} onClick={() => openModal("reject")}>
+                      <Ban size={16} /> Recusar
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {actions.length > 0 && expense.area !== "manutencao" ? (
             <div className="finance-actions-section">
               <div className="section-header-row">
                 <h3>Ações</h3>

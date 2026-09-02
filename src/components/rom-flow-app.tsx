@@ -184,7 +184,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
             subtitle={
               store.user!.role === "solicitante"
-                ? "Acompanhe cada etapa das suas solicitações."
+                ? "Manutenção: mude o status aqui. Em andamento, finalizada ou cancelar."
                 : "Visão completa das solicitações desta empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
@@ -193,6 +193,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
+            onAction={(expense, action) => store.applyFinanceAction(expense.id, action)}
           />
         );
       case "my-expenses":
@@ -205,6 +206,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
+            onAction={(expense, action) => store.applyFinanceAction(expense.id, action)}
           />
         );
       case "new-financeiro":
