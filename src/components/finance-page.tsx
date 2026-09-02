@@ -53,7 +53,10 @@ export function FinancePage({
   const inReview = expenses.filter((item) =>
     ["em_analise", "devolvido", "aberta", "em_andamento"].includes(item.status),
   );
-  const waitingPay = expenses.filter((item) => item.status === "aprovada" && !item.payment_proof);
+  const waitingPay = expenses.filter(
+    (item) =>
+      ["aprovada", "em_andamento", "finalizada"].includes(item.status) && !item.payment_proof,
+  );
   const paid = expenses.filter((item) => Boolean(item.payment_proof));
 
   const counts = {
@@ -69,12 +72,12 @@ export function FinancePage({
     <div className="page-stack">
       <section className="page-title-row">
         <div>
-          <span className="eyebrow">FINANCEIRO DIRETO</span>
+          <span className="eyebrow">{mode === "approvals" ? "FILA DA ÁREA" : "PAGAMENTOS"}</span>
           <h2>{mode === "approvals" ? "Central de aprovação" : "Pagamentos"}</h2>
           <p>
             {mode === "approvals"
               ? "Analise documentos e decida com rapidez e segurança."
-              : "Agende, conclua e anexe o comprovante final."}
+              : "Anexe o comprovante das solicitações de financeiro, manutenção, compras e RH."}
           </p>
         </div>
       </section>

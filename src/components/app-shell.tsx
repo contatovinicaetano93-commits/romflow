@@ -27,7 +27,7 @@ import {
 import { ROLE_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import { canAccessArea, canManageUsers, isAdminInbox, isMaster } from "@/lib/workflow";
+import { canAccessArea, canManageUsers, isAdminInbox } from "@/lib/workflow";
 
 type NavItem = {
   label: string;
@@ -70,7 +70,12 @@ export function navItemsFor(user: User): NavItem[] {
   }
   items.push({ label: "Minhas Solicitações", icon: FileText, screen: "my-expenses" });
   items.push({ label: "Central de aprovação", icon: ClipboardCheck, screen: "approvals" });
-  if (canAccessArea(user, "financeiro") || isMaster(user.role)) {
+  if (
+    canAccessArea(user, "financeiro") ||
+    canAccessArea(user, "manutencao") ||
+    canAccessArea(user, "compras") ||
+    canAccessArea(user, "rh")
+  ) {
     items.push({ label: "Pagamentos", icon: Wallet, screen: "payments" });
   }
   items.push({ label: "Todas Solicitações", icon: FileText, screen: "expenses" });
