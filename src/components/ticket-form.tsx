@@ -115,7 +115,7 @@ export function TicketForm({
               <h3>{AREA_LABEL[area]}</h3>
               <p>
                 {area === "manutencao"
-                  ? "Abra o chamado e você mesmo atualiza o andamento depois."
+                  ? "Depois, em Minhas solicitações, marque Em andamento, Finalizado ou Cancelado."
                   : area === "compras"
                     ? "Abra o pedido. O admin de compras valida e anda o chamado."
                     : "Abra a solicitação de RH. O admin de RH valida e finaliza."}

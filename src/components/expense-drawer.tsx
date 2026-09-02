@@ -25,7 +25,7 @@ import type { Expense, FinanceAction, FinanceActionPayload, User } from "@/lib/t
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
 import { allowedActions } from "@/lib/workflow";
-import { MaintenanceStepper } from "./maintenance-stepper";
+import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { StatusBadge } from "./status-badge";
 
 export function ExpenseDrawer({
@@ -244,9 +244,10 @@ export function ExpenseDrawer({
           {expense.area === "manutencao" ? (
             <div className="finance-actions-section">
               <div className="section-header-row">
-                <h3>Andamento do chamado</h3>
+                <h3>Status do chamado</h3>
               </div>
-              <MaintenanceStepper
+              <p className="maintenance-status-hint">Escolha: em andamento, finalizado ou cancelado.</p>
+              <MaintenanceStatusActions
                 expense={expense}
                 actions={actions}
                 busy={busy}

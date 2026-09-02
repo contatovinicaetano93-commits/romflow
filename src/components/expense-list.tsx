@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { AREA_LABEL, money, shortId } from "@/lib/format";
 import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/types";
 import { allowedActions, newRequestScreen } from "@/lib/workflow";
-import { MaintenanceStepper } from "./maintenance-stepper";
+import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { StatusBadge } from "./status-badge";
 
 const STATUS_FILTERS: Array<{ value: "todos" | ExpenseStatus; label: string }> = [
@@ -24,7 +24,7 @@ export function ExpenseList({
   expenses,
   search,
   title = "Minhas solicitações",
-  subtitle = "Acompanhe cada etapa das suas solicitações.",
+  subtitle = "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado.",
   eyebrow = "MEU FLUXO",
   companyNames = {},
   user,
@@ -64,7 +64,9 @@ export function ExpenseList({
   );
 
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
-  const hasMaintenance = expenses.some((item) => item.area === "manutencao");
+  const maintenanceItems = filtered.filter((item) => item.area === "manutencao");
+  const otherItems = filtered.filter((item) => item.area !== "manutencao");
+  const hasMaintenance = maintenanceItems.length > 0;
 
   async function run(item: Expense, action: FinanceAction) {
     if (!onAction) {
@@ -110,10 +112,10 @@ export function ExpenseList({
         <div className="summary-status">
           <i />
           <p>
-            <strong>{hasMaintenance ? "Manutenção: ande o status aqui" : "Abra o detalhe para decidir"}</strong>
+            <strong>{hasMaintenance ? "Mude o status do chamado aqui" : "Abra o detalhe para decidir"}</strong>
             <small>
               {hasMaintenance
-                ? "Em andamento, finalizada ou cancelar no próprio chamado"
+                ? "Em andamento, finalizado ou cancelado — um clique"
                 : "Aprove, devolva ou recuse pelo detalhe"}
             </small>
           </p>
@@ -166,91 +168,101 @@ export function ExpenseList({
             </span>
           </div>
         ) : (
-          <div className="expense-table-wrap">
-            <table className="expense-table">
-              <thead>
-                <tr>
-                  <th>Solicitação</th>
-                  <th>Área</th>
-                  <th>Valor</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => {
+          <div className="request-list-stack">
+            {maintenanceItems.length > 0 ? (
+              <div className="maintenance-card-list">
+                {maintenanceItems.map((item) => {
                   const actions = allowedActions(user, item);
-                  const canWalk =
-                    item.area === "manutencao" &&
-                    (actions.includes("progress") ||
-                      actions.includes("complete") ||
-                      actions.includes("cancel"));
                   return (
-                    <tr key={item.id}>
-                      <td>
-                        <button className="expense-main" type="button" onClick={() => onOpen(item)}>
-                          <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
+                    <article className="maintenance-ticket-card" key={item.id}>
+                      <div className="maintenance-ticket-head">
+                        <button type="button" className="expense-main" onClick={() => onOpen(item)}>
+                          <span className="category-icon">M</span>
                           <span>
                             <strong>{item.title}</strong>
                             <small>
                               #{shortId(item.id)}
                               {companyNames[item.company] ? ` • ${companyNames[item.company]}` : ""}
-                              {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
                             </small>
                           </span>
                         </button>
-                      </td>
-                      <td>
-                        <span className="table-subline">{AREA_LABEL[item.area]}</span>
-                      </td>
-                      <td className="amount-cell">{item.amount > 0 ? money(item.amount) : "—"}</td>
-                      <td>
-                        {canWalk ? (
-                          <div className="list-status-actions">
-                            <StatusBadge status={item.status} />
-                            {confirmCancel === item.id ? (
-                              <div className="list-cancel-confirm">
-                                <button
-                                  type="button"
-                                  className="primary-button destructive-button"
-                                  disabled={busyId === item.id}
-                                  onClick={() => void run(item, "cancel")}
-                                >
-                                  Confirmar cancelamento
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary-button"
-                                  onClick={() => setConfirmCancel(null)}
-                                >
-                                  Voltar
-                                </button>
-                              </div>
-                            ) : (
-                              <MaintenanceStepper
-                                expense={item}
-                                actions={actions}
-                                busy={busyId === item.id}
-                                onAction={(action) => {
-                                  if (action === "cancel") {
-                                    setConfirmCancel(item.id);
-                                    return;
-                                  }
-                                  void run(item, action);
-                                }}
-                              />
-                            )}
-                          </div>
-                        ) : (
+                        <StatusBadge status={item.status} />
+                      </div>
+                      {item.description ? <p className="maintenance-ticket-copy">{item.description}</p> : null}
+                      {confirmCancel === item.id ? (
+                        <div className="list-cancel-confirm">
+                          <button
+                            type="button"
+                            className="primary-button destructive-button"
+                            disabled={busyId === item.id}
+                            onClick={() => void run(item, "cancel")}
+                          >
+                            Confirmar cancelamento
+                          </button>
+                          <button type="button" className="secondary-button" onClick={() => setConfirmCancel(null)}>
+                            Voltar
+                          </button>
+                        </div>
+                      ) : (
+                        <MaintenanceStatusActions
+                          expense={item}
+                          actions={actions}
+                          busy={busyId === item.id}
+                          onAction={(action) => {
+                            if (action === "cancel") {
+                              setConfirmCancel(item.id);
+                              return;
+                            }
+                            void run(item, action);
+                          }}
+                        />
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
+            {otherItems.length > 0 ? (
+              <div className="expense-table-wrap">
+                <table className="expense-table">
+                  <thead>
+                    <tr>
+                      <th>Solicitação</th>
+                      <th>Área</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {otherItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <button className="expense-main" type="button" onClick={() => onOpen(item)}>
+                            <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
+                            <span>
+                              <strong>{item.title}</strong>
+                              <small>
+                                #{shortId(item.id)}
+                                {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
+                              </small>
+                            </span>
+                          </button>
+                        </td>
+                        <td>
+                          <span className="table-subline">{AREA_LABEL[item.area]}</span>
+                        </td>
+                        <td className="amount-cell">{item.amount > 0 ? money(item.amount) : "—"}</td>
+                        <td>
                           <button type="button" className="status-open" onClick={() => onOpen(item)}>
                             <StatusBadge status={item.status} />
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         )}
       </section>

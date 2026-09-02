@@ -184,7 +184,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
             subtitle={
               store.user!.role === "solicitante"
-                ? "Manutenção: mude o status aqui. Em andamento, finalizada ou cancelar."
+                ? "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado."
                 : "Visão completa das solicitações desta empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}

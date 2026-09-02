@@ -275,7 +275,7 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
 
   if (expense.area === "manutencao" && isOwner) {
     if (expense.status === "aberta") {
-      actions.push("progress", "cancel");
+      actions.push("progress", "complete", "cancel");
     }
     if (expense.status === "em_andamento") {
       actions.push("complete", "cancel");
@@ -307,7 +307,7 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
     }
     if (expense.area === "manutencao") {
       if (expense.status === "aberta") {
-        actions.push("progress", "reject");
+        actions.push("progress", "complete", "reject");
       }
       if (expense.status === "em_andamento") {
         actions.push("complete", "reject", "attach_proof");
