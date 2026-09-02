@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Check, Copy, Link2, Mail, Search, Shield, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Link2, Mail, Pencil, Search, Shield, UserPlus, Users } from "lucide-react";
 import { ROLE_CLASS, ROLE_LABEL, cls, formatDate } from "@/lib/format";
 import type { Company, Invitation, Role, User } from "@/lib/types";
 
@@ -9,21 +9,108 @@ function signupUrl(token: string) {
   return `${window.location.origin}/convite?token=${token}`;
 }
 
+function assignedCompanies(ids: string[], companies: Company[]): Company[] {
+  return ids
+    .map((id) => companies.find((item) => item.id === id))
+    .filter((item): item is Company => Boolean(item));
+}
+
+function CompanyChips({ ids, companies }: { ids: string[]; companies: Company[] }) {
+  const assigned = assignedCompanies(ids, companies);
+  if (assigned.length === 0) {
+    return <span className="no-companies-tag">Nenhuma empresa atribuída</span>;
+  }
+  return (
+    <div className="user-companies-chips">
+      {assigned.map((company) => (
+        <span key={company.id} className="company-badge-pill" style={{ borderLeftColor: company.color }}>
+          {company.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CompanyPicker({
+  companies,
+  selected,
+  onChange,
+}: {
+  companies: Company[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="company-selection-group">
+      <div className="company-selection-header">
+        <p className="company-selection-label">Empresas de acesso</p>
+        <div className="company-selection-actions">
+          <button type="button" onClick={() => onChange(companies.map((item) => item.id))}>
+            Marcar todas
+          </button>
+          <span>•</span>
+          <button type="button" onClick={() => onChange([])}>
+            Desmarcar
+          </button>
+        </div>
+      </div>
+      <div className="company-checkbox-grid">
+        {companies.map((company) => {
+          const checked = selected.includes(company.id);
+          return (
+            <label key={company.id} className={cls("company-checkbox-card", checked && "checked")}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() =>
+                  onChange(
+                    checked
+                      ? selected.filter((id) => id !== company.id)
+                      : [...selected, company.id],
+                  )
+                }
+              />
+              <i className="company-dot" style={{ background: company.color }} />
+              <span className="company-info">
+                <strong>{company.name}</strong>
+                <small>{company.legal_name}</small>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="signup-field-hint">
+        O usuário só vê e opera nas empresas marcadas. Selecione ao menos uma.
+      </p>
+    </div>
+  );
+}
+
+type EditingTarget =
+  | { kind: "user"; user: User }
+  | { kind: "invitation"; invitation: Invitation };
+
 export function UsersPage({
   users,
   invitations,
   companies,
+  currentUserId,
   onInvite,
+  onUpdateUser,
+  onUpdateInvitation,
   onToggle,
 }: {
   users: User[];
   invitations: Invitation[];
   companies: Company[];
+  currentUserId: string;
   onInvite: (
     email: string,
     role: Role,
     companyIds: string[],
   ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
+  onUpdateUser: (userId: string, role: Role, companyIds: string[]) => Promise<void>;
+  onUpdateInvitation: (invitationId: string, role: Role, companyIds: string[]) => Promise<void>;
   onToggle: (userId: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -35,6 +122,11 @@ export function UsersPage({
   const [copied, setCopied] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<{ email: string; link: string } | null>(null);
+  const [editing, setEditing] = useState<EditingTarget | null>(null);
+  const [editRole, setEditRole] = useState<Role>("solicitante");
+  const [editSelected, setEditSelected] = useState<string[]>([]);
+  const [editError, setEditError] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const pendingInvites = useMemo(
     () => invitations.filter((item) => !item.accepted),
@@ -59,6 +151,28 @@ export function UsersPage({
     setRole("solicitante");
   }
 
+  function closeEdit() {
+    setEditing(null);
+    setEditError("");
+    setEditSubmitting(false);
+  }
+
+  function startUserEdit(user: User) {
+    setOpen(false);
+    setEditing({ kind: "user", user });
+    setEditRole(user.role);
+    setEditSelected([...user.companyIds]);
+    setEditError("");
+  }
+
+  function startInviteEdit(invitation: Invitation) {
+    setOpen(false);
+    setEditing({ kind: "invitation", invitation });
+    setEditRole(invitation.role);
+    setEditSelected([...invitation.companyIds]);
+    setEditError("");
+  }
+
   async function copyLink(link: string, id: string) {
     await navigator.clipboard.writeText(link);
     setCopied(id);
@@ -67,17 +181,13 @@ export function UsersPage({
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (role === "solicitante" && selected.length === 0) {
-      setError("Selecione ao menos uma empresa para o Solicitante.");
+    if (selected.length === 0) {
+      setError("Selecione ao menos uma empresa de acesso.");
       return;
     }
     setSubmitting(true);
     try {
-      const invitation = await onInvite(
-        email,
-        role,
-        role === "solicitante" || selected.length > 0 ? selected : companies.map((item) => item.id),
-      );
+      const invitation = await onInvite(email, role, selected);
       const link = signupUrl(invitation.token);
       setCreated({ email: invitation.email, link });
       await copyLink(link, "created");
@@ -88,14 +198,43 @@ export function UsersPage({
     }
   }
 
-  function companyNames(ids: string[]) {
-    if (ids.length === 0 || ids.length === companies.length) {
-      return null;
+  async function handleEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) {
+      return;
     }
-    return ids
-      .map((id) => companies.find((item) => item.id === id))
-      .filter(Boolean) as Company[];
+    setEditError("");
+    if (editSelected.length === 0) {
+      setEditError("Selecione ao menos uma empresa de acesso.");
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      switch (editing.kind) {
+        case "user":
+          await onUpdateUser(editing.user.id, editRole, editSelected);
+          break;
+        case "invitation":
+          await onUpdateInvitation(editing.invitation.id, editRole, editSelected);
+          break;
+        default: {
+          const unexpected: never = editing;
+          throw new Error(`Edição não suportada: ${JSON.stringify(unexpected)}`);
+        }
+      }
+      closeEdit();
+    } catch (caught) {
+      setEditError(caught instanceof Error ? caught.message : "Não foi possível salvar o acesso.");
+    } finally {
+      setEditSubmitting(false);
+    }
   }
+
+  const editingTitle = editing
+    ? editing.kind === "user"
+      ? `Editar acesso de ${editing.user.name}`
+      : `Editar convite de ${editing.invitation.email}`
+    : "";
 
   return (
     <div className="page-stack">
@@ -104,8 +243,8 @@ export function UsersPage({
           <span className="eyebrow">ACESSO E SEGURANÇA</span>
           <h2>Gestão de usuários</h2>
           <p>
-            Crie o usuário pelo e-mail. O sistema gera um link para a pessoa finalizar o cadastro
-            com a senha dela.
+            Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Depois você pode
+            editar esses acessos a qualquer momento.
           </p>
         </div>
         <button
@@ -163,59 +302,46 @@ export function UsersPage({
                 <th>Empresas permitidas</th>
                 <th>Status</th>
                 <th>Cadastro</th>
-                <th>Kill Switch</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => {
-                const assigned = companyNames(item.companyIds);
-                return (
-                  <tr key={item.id}>
-                    <td>
-                      <strong>{item.name}</strong>
-                      <small className="table-subline">{item.email}</small>
-                    </td>
-                    <td>
-                      <span className={`role-badge ${ROLE_CLASS[item.role]}`}>
-                        {ROLE_LABEL[item.role]}
-                      </span>
-                    </td>
-                    <td>
-                      {item.role !== "solicitante" || !assigned ? (
-                        <span className="all-companies-tag">Todas as empresas</span>
-                      ) : assigned.length === 0 ? (
-                        <span className="no-companies-tag">Nenhuma empresa atribuída</span>
-                      ) : (
-                        <div className="user-companies-chips">
-                          {assigned.map((company) => (
-                            <span
-                              key={company.id}
-                              className="company-badge-pill"
-                              style={{ borderLeftColor: company.color }}
-                            >
-                              {company.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`user-status ${item.status}`}>
-                        <i /> {item.status === "active" ? "Ativo" : "Inativo"}
-                      </span>
-                    </td>
-                    <td>{formatDate(item.created)}</td>
-                    <td>
+              {filtered.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <strong>{item.name}</strong>
+                    <small className="table-subline">{item.email}</small>
+                  </td>
+                  <td>
+                    <span className={`role-badge ${ROLE_CLASS[item.role]}`}>
+                      {ROLE_LABEL[item.role]}
+                    </span>
+                  </td>
+                  <td>
+                    <CompanyChips ids={item.companyIds} companies={companies} />
+                  </td>
+                  <td>
+                    <span className={`user-status ${item.status}`}>
+                      <i /> {item.status === "active" ? "Ativo" : "Inativo"}
+                    </span>
+                  </td>
+                  <td>{formatDate(item.created)}</td>
+                  <td>
+                    <div className="user-row-actions">
+                      <button className="secondary-button" type="button" onClick={() => startUserEdit(item)}>
+                        <Pencil size={14} /> Editar
+                      </button>
                       <button
                         className={cls("switch-button", item.status === "active" && "on")}
+                        disabled={item.id === currentUserId}
                         onClick={() => onToggle(item.id)}
                       >
                         <i /> {item.status === "active" ? "Ativo" : "Inativo"}
                       </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -240,15 +366,23 @@ export function UsersPage({
                   <small>
                     {ROLE_LABEL[item.role]} • Aguardando a pessoa cadastrar a senha
                   </small>
+                  <div className="invitation-companies">
+                    <CompanyChips ids={item.companyIds} companies={companies} />
+                  </div>
                 </span>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void copyLink(link, item.id)}
-                >
-                  {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
-                  {copied === item.id ? "Link copiado" : "Copiar link"}
-                </button>
+                <div className="invitation-actions">
+                  <button className="secondary-button" type="button" onClick={() => startInviteEdit(item)}>
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void copyLink(link, item.id)}
+                  >
+                    {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
+                    {copied === item.id ? "Link copiado" : "Copiar link"}
+                  </button>
+                </div>
               </div>
             );
           })
@@ -313,7 +447,8 @@ export function UsersPage({
                 <div>
                   <h3>Criar usuário</h3>
                   <p className="modal-lead">
-                    Informe o e-mail. Depois copie o link para a pessoa finalizar o cadastro.
+                    Informe o e-mail, o perfil e as empresas. Depois copie o link para a pessoa
+                    finalizar o cadastro.
                   </p>
                 </div>
               </header>
@@ -329,58 +464,12 @@ export function UsersPage({
               <label>
                 Perfil
                 <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-                  <option value="solicitante">Solicitante (escopo restrito por empresa)</option>
+                  <option value="solicitante">Solicitante</option>
                   <option value="financeiro">Financeiro</option>
                   <option value="admin">Administrador</option>
                 </select>
               </label>
-              <div className="company-selection-group">
-                <div className="company-selection-header">
-                  <p className="company-selection-label">Empresas</p>
-                  <div className="company-selection-actions">
-                    <button type="button" onClick={() => setSelected(companies.map((item) => item.id))}>
-                      Marcar todas
-                    </button>
-                    <span>•</span>
-                    <button type="button" onClick={() => setSelected([])}>
-                      Desmarcar
-                    </button>
-                  </div>
-                </div>
-                <div className="company-checkbox-grid">
-                  {companies.map((company) => {
-                    const checked = selected.includes(company.id);
-                    return (
-                      <label
-                        key={company.id}
-                        className={cls("company-checkbox-card", checked && "checked")}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            setSelected((current) =>
-                              current.includes(company.id)
-                                ? current.filter((id) => id !== company.id)
-                                : [...current, company.id],
-                            )
-                          }
-                        />
-                        <i className="company-dot" style={{ background: company.color }} />
-                        <span className="company-info">
-                          <strong>{company.name}</strong>
-                          <small>{company.legal_name}</small>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {role === "solicitante" ? (
-                  <p className={error.includes("empresa") ? "field-hint-error" : "signup-field-hint"}>
-                    O perfil Solicitante precisa de pelo menos uma empresa marcada.
-                  </p>
-                ) : null}
-              </div>
+              <CompanyPicker companies={companies} selected={selected} onChange={setSelected} />
               {error ? <div className="form-error">{error}</div> : null}
               <footer>
                 <button className="secondary-button" type="button" onClick={closeModal}>
@@ -393,6 +482,56 @@ export function UsersPage({
               </footer>
             </form>
           )}
+        </div>
+      ) : null}
+
+      {editing ? (
+        <div className="modal-layer">
+          <button className="modal-overlay" onClick={closeEdit} />
+          <form className="action-modal" onSubmit={handleEdit}>
+            <header>
+              <div className="modal-icon emerald">
+                <Pencil size={20} />
+              </div>
+              <div>
+                <h3>{editingTitle}</h3>
+                <p className="modal-lead">
+                  Altere o perfil e as empresas permitidas. A mudança vale na próxima sessão da
+                  pessoa.
+                </p>
+              </div>
+            </header>
+            {editing.kind === "user" ? (
+              <label>
+                E-mail
+                <input value={editing.user.email} readOnly />
+              </label>
+            ) : (
+              <label>
+                E-mail
+                <input value={editing.invitation.email} readOnly />
+              </label>
+            )}
+            <label>
+              Perfil
+              <select value={editRole} onChange={(event) => setEditRole(event.target.value as Role)}>
+                <option value="solicitante">Solicitante</option>
+                <option value="financeiro">Financeiro</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </label>
+            <CompanyPicker companies={companies} selected={editSelected} onChange={setEditSelected} />
+            {editError ? <div className="form-error">{editError}</div> : null}
+            <footer>
+              <button className="secondary-button" type="button" onClick={closeEdit}>
+                Cancelar
+              </button>
+              <button className="primary-button" disabled={editSubmitting}>
+                {editSubmitting ? <span className="spinner" /> : null}
+                {editSubmitting ? "Salvando..." : "Salvar acessos"}
+              </button>
+            </footer>
+          </form>
         </div>
       ) : null}
     </div>

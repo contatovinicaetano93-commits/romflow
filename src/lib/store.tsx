@@ -82,9 +82,15 @@ type StoreValue = {
     role: Role,
     companyIds: string[],
   ) => Promise<Invitation & { emailSent: boolean; emailError?: string }>;
-  validateInvite: (token: string) => Promise<Invitation>;
+  validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
+  updateUserAccess: (userId: string, role: Role, companyIds: string[]) => Promise<void>;
+  updateInvitationAccess: (
+    invitationId: string,
+    role: Role,
+    companyIds: string[],
+  ) => Promise<void>;
   createCompany: (input: { name: string; color: string }) => Promise<void>;
   createCategory: (input: { name: string; color: string }) => Promise<void>;
   updateCategory: (id: string, patch: Partial<Category>) => Promise<void>;
@@ -182,9 +188,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const selectCompany = useCallback(
     (id: string) => {
+      if (!user?.companyIds.includes(id)) {
+        return;
+      }
       setCompany(db.companies.find((item) => item.id === id) ?? null);
     },
-    [db.companies],
+    [db.companies, user],
   );
 
   const switchCompany = useCallback(() => {
@@ -195,11 +204,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return [];
     }
-    const active = db.companies.filter((item) => item.is_active);
-    if (user.role === "admin" || user.role === "financeiro") {
-      return active;
-    }
-    return active.filter((item) => user.companyIds.includes(item.id));
+    return db.companies.filter((item) => item.is_active && user.companyIds.includes(item.id));
   }, [db.companies, user]);
 
   const companyExpenses = useCallback(
@@ -255,10 +260,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const validateInvite = useCallback(async (token: string) => {
-    const result = await api<{ invitation: Invitation }>(
+    return api<{ invitation: Invitation; companies: Company[] }>(
       `/api/invitations/validate?token=${encodeURIComponent(token)}`,
     );
-    return result.invitation;
   }, []);
 
   const acceptInvite = useCallback(
@@ -281,6 +285,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await api("/api/users/toggle", {
         method: "POST",
         body: JSON.stringify({ userId }),
+      });
+      await refreshData();
+    },
+    [refreshData],
+  );
+
+  const updateUserAccess = useCallback(
+    async (userId: string, role: Role, companyIds: string[]) => {
+      const result = await api<{ user: User }>("/api/users", {
+        method: "PATCH",
+        body: JSON.stringify({ userId, role, companyIds }),
+      });
+      if (user?.id === userId) {
+        setUser(result.user);
+        syncSentryUser(result.user);
+        setCompany((current) =>
+          current && result.user.companyIds.includes(current.id) ? current : null,
+        );
+      }
+      await refreshData(user?.id === userId ? result.user : undefined);
+    },
+    [refreshData, user],
+  );
+
+  const updateInvitationAccess = useCallback(
+    async (invitationId: string, role: Role, companyIds: string[]) => {
+      await api("/api/invitations", {
+        method: "PATCH",
+        body: JSON.stringify({ invitationId, role, companyIds }),
       });
       await refreshData();
     },
@@ -346,6 +379,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       validateInvite,
       acceptInvite,
       toggleUserStatus,
+      updateUserAccess,
+      updateInvitationAccess,
       createCompany,
       createCategory,
       updateCategory,
@@ -374,6 +409,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       switchCompany,
       toggleUserStatus,
       updateCategory,
+      updateInvitationAccess,
+      updateUserAccess,
       user,
       validateInvite,
     ],

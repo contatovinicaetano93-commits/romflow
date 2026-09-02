@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell, canAccessScreen } from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
@@ -34,8 +34,30 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const [loginBanner, setLoginBanner] = useState("");
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
+  const accessibleCompanies = store.accessibleCompanies();
+  const onlyCompanyId = accessibleCompanies.length === 1 ? accessibleCompanies[0].id : null;
   const expenses = store.companyExpenses();
   const myExpenses = expenses.filter((item) => item.requester === store.user?.id);
+
+  const selectCompany = store.selectCompany;
+  const switchCompany = store.switchCompany;
+  const currentCompanyId = store.company?.id ?? null;
+
+  useEffect(() => {
+    if (!store.user || currentCompanyId || !onlyCompanyId) {
+      return;
+    }
+    selectCompany(onlyCompanyId);
+  }, [currentCompanyId, onlyCompanyId, selectCompany, store.user]);
+
+  useEffect(() => {
+    if (!currentCompanyId) {
+      return;
+    }
+    if (!accessibleCompanies.some((item) => item.id === currentCompanyId)) {
+      switchCompany();
+    }
+  }, [accessibleCompanies, currentCompanyId, switchCompany]);
 
   const closePopovers = useCallback(() => {
     setNotificationsOpen(false);
@@ -103,10 +125,22 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   }
 
   if (!store.company) {
+    if (onlyCompanyId) {
+      return (
+        <div className="login-page">
+          <section className="login-form-wrap">
+            <div className="login-form">
+              <span className="secure-label">ROM FLOW</span>
+              <h2>Abrindo sua empresa...</h2>
+            </div>
+          </section>
+        </div>
+      );
+    }
     return (
       <CompanySelect
         user={store.user}
-        companies={store.accessibleCompanies()}
+        companies={accessibleCompanies}
         onSelect={(id) => {
           store.selectCompany(id);
           setScreen(store.user?.role === "solicitante" ? "expenses" : "dashboard");
@@ -212,7 +246,10 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             users={store.db.users}
             invitations={store.db.invitations}
             companies={store.db.companies}
+            currentUserId={store.user!.id}
             onInvite={store.inviteUser}
+            onUpdateUser={store.updateUserAccess}
+            onUpdateInvitation={store.updateInvitationAccess}
             onToggle={async (userId) => {
               await store.toggleUserStatus(userId);
             }}

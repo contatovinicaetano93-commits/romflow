@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff, Lock, Mail, Shield, Sparkles, UserRound } from "lucide-react";
-import type { Invitation } from "@/lib/types";
+import type { Company, Invitation } from "@/lib/types";
 import { ROLE_LABEL } from "@/lib/format";
 
 function suggestedName(email: string): string {
@@ -21,11 +21,12 @@ export function InvitePage({
   onGoToLogin,
 }: {
   token: string;
-  onValidate: (token: string) => Promise<Invitation>;
+  onValidate: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   onAccept: (token: string, name: string, password: string) => Promise<void>;
   onGoToLogin: () => void;
 }) {
   const [invite, setInvite] = useState<Invitation | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [resolvedError, setResolvedError] = useState("");
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -48,14 +49,16 @@ export function InvitePage({
         if (cancelled) {
           return;
         }
-        setInvite(next);
-        setName(suggestedName(next.email));
+        setInvite(next.invitation);
+        setCompanies(next.companies);
+        setName(suggestedName(next.invitation.email));
         setResolvedError("");
       } catch (caught) {
         if (cancelled) {
           return;
         }
         setInvite(null);
+        setCompanies([]);
         setResolvedError(
           caught instanceof Error
             ? caught.message
@@ -180,9 +183,26 @@ export function InvitePage({
               </div>
             </label>
             {invite ? (
-              <p style={{ marginTop: -20, marginBottom: 18, color: "#71717a", fontSize: 12 }}>
-                Perfil: {ROLE_LABEL[invite.role]}
-              </p>
+              <div className="invite-access-card">
+                <p>
+                  Perfil: <strong>{ROLE_LABEL[invite.role]}</strong>
+                </p>
+                {companies.length === 0 ? (
+                  <span className="no-companies-tag">Nenhuma empresa atribuída</span>
+                ) : (
+                  <div className="user-companies-chips">
+                    {companies.map((company) => (
+                      <span
+                        key={company.id}
+                        className="company-badge-pill"
+                        style={{ borderLeftColor: company.color }}
+                      >
+                        {company.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : null}
             <label>
               Nome completo

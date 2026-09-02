@@ -1,4 +1,4 @@
-import type { ExpenseStatus, ExpenseType, PaymentMethod, Role } from "./types";
+import type { AuditAction, ExpenseStatus, ExpenseType, PaymentMethod, Role } from "./types";
 
 export function money(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -119,7 +119,7 @@ export const CATEGORY_COLOR: Record<string, string> = {
   Outros: "#71717A",
 };
 
-export const AUDIT_LABEL = {
+export const AUDIT_LABEL: Record<AuditAction, string> = {
   CREATE_EXPENSE: "Criou solicitação",
   START_REVIEW: "Iniciou análise",
   REQUEST_DOCUMENTATION: "Solicitou documentos",
@@ -129,7 +129,8 @@ export const AUDIT_LABEL = {
   REJECT_EXPENSE: "Recusou despesa",
   UPDATE_EXPENSE: "Atualizou despesa",
   DELETE_EXPENSE: "Excluiu despesa",
-} as const;
+  UPDATE_USER: "Atualizou acesso de usuário",
+};
 
 export const KINDNESS_PHRASES = [
   "Que bom tê-lo aqui!",

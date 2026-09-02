@@ -70,3 +70,41 @@ body {
   text-align: center;
   padding: 24px 20px;
 }
+
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.invitation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.invitation-companies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.invite-access-card {
+  border: 1px solid #ffffff14;
+  background: #ffffff08;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+}
+
+.invite-access-card p {
+  margin: 0 0 8px;
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.invite-access-card .user-companies-chips {
+  max-width: none;
+}

@@ -41,7 +41,8 @@ export type AuditAction =
   | "PAY_EXPENSE"
   | "REJECT_EXPENSE"
   | "UPDATE_EXPENSE"
-  | "DELETE_EXPENSE";
+  | "DELETE_EXPENSE"
+  | "UPDATE_USER";
 
 export type FinanceAction =
   | "review"

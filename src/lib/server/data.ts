@@ -1,4 +1,5 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { canAccessCompany } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { uid } from "@/lib/db/ids";
 import {
@@ -97,6 +98,60 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
   };
 }
 
+function parseRole(role: unknown): Role {
+  if (role === "admin" || role === "financeiro" || role === "solicitante") {
+    return role;
+  }
+  throw new Error("Perfil inválido.");
+}
+
+async function resolveCompanyIds(companyIds: string[]): Promise<string[]> {
+  const unique = [...new Set(companyIds.filter(Boolean))];
+  if (unique.length === 0) {
+    throw new Error("Selecione ao menos uma empresa.");
+  }
+  const rows = await getDb().select({ id: companies.id }).from(companies);
+  const valid = new Set(rows.map((row) => row.id));
+  const resolved = unique.filter((id) => valid.has(id));
+  if (resolved.length === 0) {
+    throw new Error("Selecione ao menos uma empresa válida.");
+  }
+  return resolved;
+}
+
+export async function listCompaniesByIds(companyIds: string[]): Promise<Company[]> {
+  if (companyIds.length === 0) {
+    return [];
+  }
+  const rows = await getDb().select().from(companies).where(inArray(companies.id, companyIds));
+  const order = new Map(companyIds.map((id, index) => [id, index]));
+  return rows
+    .map(mapCompany)
+    .sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
+}
+
+async function replaceUserCompanies(userId: string, companyIds: string[]): Promise<void> {
+  const db = getDb();
+  await db.delete(userCompanies).where(eq(userCompanies.userId, userId));
+  await db.insert(userCompanies).values(
+    companyIds.map((companyId) => ({
+      userId,
+      companyId,
+    })),
+  );
+}
+
+async function replaceInvitationCompanies(invitationId: string, companyIds: string[]): Promise<void> {
+  const db = getDb();
+  await db.delete(invitationCompanies).where(eq(invitationCompanies.invitationId, invitationId));
+  await db.insert(invitationCompanies).values(
+    companyIds.map((companyId) => ({
+      invitationId,
+      companyId,
+    })),
+  );
+}
+
 async function loadAllUsers(): Promise<User[]> {
   const db = getDb();
   const rows = await db.select().from(users);
@@ -162,18 +217,18 @@ export async function getSnapshot(actor: User): Promise<Database> {
       : [];
 
   const visibleCompanies =
-    actor.role === "admin" || actor.role === "financeiro"
+    actor.role === "admin"
       ? companyRows
       : companyRows.filter((item) => actor.companyIds.includes(item.id));
 
   const visibleExpenses = expenseRows.filter((item) => {
+    if (!actor.companyIds.includes(item.companyId)) {
+      return false;
+    }
     if (actor.role === "solicitante") {
       return item.requesterId === actor.id;
     }
-    if (actor.role === "financeiro" || actor.role === "admin") {
-      return true;
-    }
-    return false;
+    return true;
   });
 
   return {
@@ -257,6 +312,9 @@ export async function createExpenseRecord(
   actor: User,
   input: Omit<Expense, "id" | "created" | "updated">,
 ): Promise<Expense> {
+  if (!canAccessCompany(actor, input.company)) {
+    throw new Error("Você não tem acesso a esta empresa.");
+  }
   const created = new Date().toISOString();
   const expense: Expense = {
     ...input,
@@ -314,6 +372,9 @@ export async function applyFinanceActionRecord(
     throw new Error("Solicitação não encontrada.");
   }
   const current = mapExpense(currentRow);
+  if (!canAccessCompany(actor, current.company)) {
+    throw new Error("Você não tem acesso a esta empresa.");
+  }
   let status: ExpenseStatus = current.status;
   let audit: AuditAction = "UPDATE_EXPENSE";
   switch (action) {
@@ -405,6 +466,8 @@ export async function createInvitationRecord(
   companyIds: string[],
 ): Promise<Invitation> {
   const normalized = email.trim().toLowerCase();
+  const resolvedRole = parseRole(role);
+  const resolvedCompanies = await resolveCompanyIds(companyIds);
   const db = getDb();
   const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalized)).limit(1);
   if (existingUser) {
@@ -421,8 +484,8 @@ export async function createInvitationRecord(
   const invitation: Invitation = {
     id: uid("inv"),
     email: email.trim().toLowerCase(),
-    role,
-    companyIds,
+    role: resolvedRole,
+    companyIds: resolvedCompanies,
     token: uid("token"),
     invitedBy: actor.id,
     created: new Date().toISOString(),
@@ -439,9 +502,9 @@ export async function createInvitationRecord(
     expires: invitation.expires,
     accepted: false,
   });
-  if (companyIds.length) {
+  if (resolvedCompanies.length) {
     await db.insert(invitationCompanies).values(
-      companyIds.map((companyId) => ({
+      resolvedCompanies.map((companyId) => ({
         invitationId: invitation.id,
         companyId,
       })),
@@ -509,6 +572,75 @@ export async function acceptInvitation(token: string, name: string, password: st
   await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
   await createSession(nextUser.id);
   return nextUser;
+}
+
+export async function updateUserAccessRecord(
+  actor: User,
+  userId: string,
+  role: Role,
+  companyIds: string[],
+): Promise<User> {
+  const resolvedRole = parseRole(role);
+  const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const db = getDb();
+  const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!row) {
+    throw new Error("Usuário não encontrado.");
+  }
+  if (actor.id === userId && resolvedRole !== "admin") {
+    throw new Error("Você não pode remover o próprio perfil de administrador.");
+  }
+  if (row.role === "admin" && resolvedRole !== "admin") {
+    const adminRows = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
+    if (adminRows.length <= 1) {
+      throw new Error("É preciso manter ao menos um administrador.");
+    }
+  }
+  const previousLinks = await db
+    .select({ companyId: userCompanies.companyId })
+    .from(userCompanies)
+    .where(eq(userCompanies.userId, userId));
+  await db.update(users).set({ role: resolvedRole }).where(eq(users.id, userId));
+  await replaceUserCompanies(userId, resolvedCompanies);
+  await writeAudit(
+    actor.id,
+    "UPDATE_USER",
+    userId,
+    `${row.role} | ${previousLinks.map((item) => item.companyId).join(",") || "nenhuma"}`,
+    `${resolvedRole} | ${resolvedCompanies.join(",")}`,
+  );
+  const updated = await loadUser(userId);
+  if (!updated) {
+    throw new Error("Usuário não encontrado.");
+  }
+  return updated;
+}
+
+export async function updateInvitationAccessRecord(
+  invitationId: string,
+  role: Role,
+  companyIds: string[],
+): Promise<Invitation> {
+  const resolvedRole = parseRole(role);
+  const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const db = getDb();
+  const [row] = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
+  if (!row || row.accepted) {
+    throw new Error("Convite inválido ou já utilizado.");
+  }
+  await db.update(invitations).set({ role: resolvedRole }).where(eq(invitations.id, invitationId));
+  await replaceInvitationCompanies(invitationId, resolvedCompanies);
+  return {
+    id: row.id,
+    email: row.email,
+    role: resolvedRole,
+    companyIds: resolvedCompanies,
+    token: row.token,
+    invitedBy: row.invitedBy,
+    created: row.created,
+    expires: row.expires,
+    accepted: row.accepted,
+  };
 }
 
 export async function toggleUserStatusRecord(actor: User, userId: string): Promise<void> {
