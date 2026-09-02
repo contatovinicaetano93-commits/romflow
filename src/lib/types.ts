@@ -147,6 +147,25 @@ export type AuditLog = {
   created: string;
 };
 
+export type EmailLogKind = "invite" | "expense_created" | "expense_status";
+
+export type EmailLogStatus = "sent" | "failed";
+
+export type EmailLog = {
+  id: string;
+  kind: EmailLogKind;
+  expenseId: string | null;
+  invitationId: string | null;
+  toEmail: string;
+  toName: string;
+  toRole: Role | null;
+  subject: string;
+  status: EmailLogStatus;
+  error: string;
+  resendId: string | null;
+  created: string;
+};
+
 export type Database = {
   revision: number;
   companies: Company[];
@@ -155,6 +174,7 @@ export type Database = {
   invitations: Invitation[];
   expenses: Expense[];
   auditLogs: AuditLog[];
+  emailLogs: EmailLog[];
 };
 
 export function assertNever(value: never): never {

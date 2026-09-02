@@ -79,4 +79,5 @@ export const SEED: Database = {
   invitations: [],
   expenses: [],
   auditLogs: [],
+  emailLogs: [],
 };

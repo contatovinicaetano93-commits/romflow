@@ -32,6 +32,7 @@ const EMPTY_DB: Database = {
   invitations: [],
   expenses: [],
   auditLogs: [],
+  emailLogs: [],
 };
 
 function syncSentryUser(user: User | null) {

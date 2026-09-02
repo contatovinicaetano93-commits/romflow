@@ -1,11 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Shield } from "lucide-react";
-import { AUDIT_LABEL, formatDateTime, initials } from "@/lib/format";
-import type { AuditLog, User } from "@/lib/types";
+import { Mail, Search, Shield } from "lucide-react";
+import {
+  AUDIT_LABEL,
+  EMAIL_KIND_LABEL,
+  EMAIL_STATUS_LABEL,
+  ROLE_LABEL,
+  formatDateTime,
+  initials,
+} from "@/lib/format";
+import type { AuditLog, EmailLog, User } from "@/lib/types";
 
-export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) {
+export function AuditPage({
+  logs,
+  emailLogs,
+  users,
+}: {
+  logs: AuditLog[];
+  emailLogs: EmailLog[];
+  users: User[];
+}) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(
     () =>
@@ -17,7 +32,17 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
       }),
     [logs, query, users],
   );
+  const filteredMail = useMemo(
+    () =>
+      emailLogs.filter((item) =>
+        `${item.toEmail} ${item.toName} ${item.subject} ${EMAIL_KIND_LABEL[item.kind]} ${item.status}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      ),
+    [emailLogs, query],
+  );
   const uniqueUsers = new Set(logs.map((item) => item.user)).size;
+  const sentCount = emailLogs.filter((item) => item.status === "sent").length;
 
   return (
     <div className="page-stack">
@@ -25,7 +50,7 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
         <div>
           <span className="eyebrow">GOVERNANÇA</span>
           <h2>Log de auditoria</h2>
-          <p>Rastreabilidade completa de alterações em todo o fluxo financeiro.</p>
+          <p>Rastreabilidade das alterações e de cada e-mail enviado pelo ROM Flow.</p>
         </div>
       </section>
       <section className="audit-summary">
@@ -37,17 +62,17 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
           </div>
         </article>
         <article>
-          <Shield size={18} />
+          <Mail size={18} />
           <div>
-            <strong>{uniqueUsers}</strong>
-            <span>usuários ativos no log</span>
+            <strong>{sentCount}</strong>
+            <span>e-mails enviados</span>
           </div>
         </article>
         <article>
           <Shield size={18} />
           <div>
-            <strong>{logs.length === 0 ? "—" : "100%"}</strong>
-            <span>{logs.length === 0 ? "aguardando eventos" : "ações rastreadas"}</span>
+            <strong>{uniqueUsers}</strong>
+            <span>usuários ativos no log</span>
           </div>
         </article>
       </section>
@@ -58,7 +83,7 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar evento"
+              placeholder="Buscar evento ou e-mail"
             />
           </div>
         </div>
@@ -105,6 +130,55 @@ export function AuditPage({ logs, users }: { logs: AuditLog[]; users: User[] }) 
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <section className="panel data-panel">
+        <header className="email-log-header">
+          <h3>Envios de e-mail</h3>
+          <p>Cada convite e cada movimentação de solicitação fica registrado aqui.</p>
+        </header>
+        {filteredMail.length === 0 ? (
+          <div className="empty-state">
+            <strong>Nenhum e-mail registrado</strong>
+          </div>
+        ) : (
+          <div className="expense-table-wrap">
+            <table className="expense-table audit-table">
+              <thead>
+                <tr>
+                  <th>Data e hora</th>
+                  <th>Destinatário</th>
+                  <th>Tipo</th>
+                  <th>Assunto</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMail.map((item) => (
+                  <tr key={item.id}>
+                    <td>{formatDateTime(item.created)}</td>
+                    <td>
+                      <strong>{item.toName || item.toEmail}</strong>
+                      <small className="table-subline">
+                        {item.toEmail}
+                        {item.toRole ? ` · ${ROLE_LABEL[item.toRole]}` : ""}
+                      </small>
+                    </td>
+                    <td>{EMAIL_KIND_LABEL[item.kind]}</td>
+                    <td>{item.subject}</td>
+                    <td>
+                      <span className={`email-status ${item.status}`}>
+                        {EMAIL_STATUS_LABEL[item.status]}
+                      </span>
+                      {item.status === "failed" && item.error ? (
+                        <small className="table-subline">{item.error}</small>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

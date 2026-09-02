@@ -1,4 +1,12 @@
-import type { AuditAction, ExpenseStatus, ExpenseType, PaymentMethod, Role } from "./types";
+import type {
+  AuditAction,
+  EmailLogKind,
+  EmailLogStatus,
+  ExpenseStatus,
+  ExpenseType,
+  PaymentMethod,
+  Role,
+} from "./types";
 
 export function money(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -130,6 +138,17 @@ export const AUDIT_LABEL: Record<AuditAction, string> = {
   UPDATE_EXPENSE: "Atualizou despesa",
   DELETE_EXPENSE: "Excluiu despesa",
   UPDATE_USER: "Atualizou acesso de usuário",
+};
+
+export const EMAIL_KIND_LABEL: Record<EmailLogKind, string> = {
+  invite: "Convite de acesso",
+  expense_created: "Nova solicitação",
+  expense_status: "Movimentação de solicitação",
+};
+
+export const EMAIL_STATUS_LABEL: Record<EmailLogStatus, string> = {
+  sent: "Enviado",
+  failed: "Falhou",
 };
 
 export const KINDNESS_PHRASES = [

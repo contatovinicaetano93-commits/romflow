@@ -108,3 +108,36 @@ body {
 .invite-access-card .user-companies-chips {
   max-width: none;
 }
+
+.email-log-header {
+  margin-bottom: 12px;
+}
+
+.email-log-header h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.email-log-header p {
+  margin: 0;
+  color: var(--rom-muted);
+  font-size: 12px;
+}
+
+.email-status {
+  display: inline-flex;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.email-status.sent {
+  color: #6ee7b7;
+  background: #10b9811a;
+}
+
+.email-status.failed {
+  color: #fca5a5;
+  background: #ef44441a;
+}

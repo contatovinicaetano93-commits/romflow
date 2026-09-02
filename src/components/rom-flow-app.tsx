@@ -256,7 +256,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           />
         );
       case "audit":
-        return <AuditPage logs={store.db.auditLogs} users={store.db.users} />;
+        return <AuditPage logs={store.db.auditLogs} emailLogs={store.db.emailLogs} users={store.db.users} />;
       case "settings":
         return (
           <SettingsPage

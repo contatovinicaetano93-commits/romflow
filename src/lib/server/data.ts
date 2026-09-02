@@ -11,12 +11,14 @@ import {
   invitations,
   userCompanies,
   users,
+  emailLogs,
 } from "@/lib/db/schema";
 import type {
   AuditAction,
   Category,
   Company,
   Database,
+  EmailLog,
   Expense,
   ExpenseStatus,
   ExpenseType,
@@ -167,6 +169,49 @@ async function loadAllUsers(): Promise<User[]> {
   }));
 }
 
+export async function listNotificationRecipients(companyId: string, requesterId: string): Promise<User[]> {
+  const all = await loadAllUsers();
+  const seen = new Set<string>();
+  const recipients: User[] = [];
+  for (const user of all) {
+    if (user.status !== "active") {
+      continue;
+    }
+    const isRequester = user.id === requesterId;
+    const watchesCompany =
+      (user.role === "admin" || user.role === "financeiro") && user.companyIds.includes(companyId);
+    if (!isRequester && !watchesCompany) {
+      continue;
+    }
+    const key = user.email.trim().toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    recipients.push(user);
+  }
+  return recipients;
+}
+
+function mapEmailLog(row: typeof emailLogs.$inferSelect): EmailLog {
+  const role = row.toRole;
+  const kind = row.kind;
+  return {
+    id: row.id,
+    kind: kind === "invite" || kind === "expense_created" || kind === "expense_status" ? kind : "expense_status",
+    expenseId: row.expenseId,
+    invitationId: row.invitationId,
+    toEmail: row.toEmail,
+    toName: row.toName,
+    toRole: role === "admin" || role === "financeiro" || role === "solicitante" ? role : null,
+    subject: row.subject,
+    status: row.status === "sent" ? "sent" : "failed",
+    error: row.error,
+    resendId: row.resendId,
+    created: row.created,
+  };
+}
+
 async function loadInvitations(): Promise<Invitation[]> {
   const db = getDb();
   const rows = await db.select().from(invitations).orderBy(desc(invitations.created));
@@ -231,6 +276,11 @@ export async function getSnapshot(actor: User): Promise<Database> {
     return true;
   });
 
+  const mailRows =
+    actor.role === "admin"
+      ? await db.select().from(emailLogs).orderBy(desc(emailLogs.created))
+      : [];
+
   return {
     revision: 1,
     companies: visibleCompanies.map(mapCompany),
@@ -247,6 +297,7 @@ export async function getSnapshot(actor: User): Promise<Database> {
       after: item.after,
       created: item.created,
     })),
+    emailLogs: mailRows.map(mapEmailLog),
   };
 }
 

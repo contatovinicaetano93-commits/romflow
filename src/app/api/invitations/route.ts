@@ -13,7 +13,18 @@ export async function POST(request: Request) {
       return jsonError("Informe e-mail e perfil.");
     }
     const invitation = await createInvitationRecord(user, body.email, body.role, body.companyIds ?? []);
-    const mail = await sendInviteEmail(invitation, user.name);
+    let mail: { sent: boolean; error?: string } = {
+      sent: false,
+      error: "Não foi possível enviar o e-mail.",
+    };
+    try {
+      mail = await sendInviteEmail(invitation, user.name);
+    } catch (caught) {
+      mail = {
+        sent: false,
+        error: caught instanceof Error ? caught.message : "Não foi possível enviar o e-mail.",
+      };
+    }
     return jsonOk({ invitation, emailSent: mail.sent, emailError: mail.error });
   } catch (caught) {
     const message = publicError(caught);

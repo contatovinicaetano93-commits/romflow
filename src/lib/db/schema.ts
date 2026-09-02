@@ -112,3 +112,18 @@ export const auditLogs = pgTable("audit_logs", {
   after: text("after").notNull(),
   created: text("created").notNull(),
 });
+
+export const emailLogs = pgTable("email_logs", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  expenseId: text("expense_id"),
+  invitationId: text("invitation_id"),
+  toEmail: text("to_email").notNull(),
+  toName: text("to_name").notNull().default(""),
+  toRole: text("to_role"),
+  subject: text("subject").notNull(),
+  status: text("status").notNull(),
+  error: text("error").notNull().default(""),
+  resendId: text("resend_id"),
+  created: text("created").notNull(),
+});
