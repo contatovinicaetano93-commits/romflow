@@ -275,7 +275,7 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
 
   if (expense.area === "manutencao" && isOwner) {
     if (expense.status === "aberta") {
-      actions.push("progress", "cancel");
+      actions.push("progress", "complete", "cancel");
     }
     if (expense.status === "em_andamento") {
       actions.push("complete", "cancel");
@@ -306,10 +306,13 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
       }
     }
     if (expense.area === "manutencao") {
-      if (expense.status !== "cancelada" && expense.status !== "finalizada") {
-        actions.push("reject");
+      if (expense.status === "aberta") {
+        actions.push("progress", "complete", "reject");
       }
-      if (expense.status === "finalizada" || expense.status === "em_andamento") {
+      if (expense.status === "em_andamento") {
+        actions.push("complete", "reject", "attach_proof");
+      }
+      if (expense.status === "finalizada") {
         actions.push("attach_proof");
       }
     }
@@ -333,6 +336,26 @@ export function isAdminInbox(expense: Expense): boolean {
       return expense.status === "aberta" || expense.status === "em_andamento";
     default:
       return assertNever(expense.area);
+  }
+}
+
+export function isWaitingPayment(expense: Expense): boolean {
+  if (expense.payment_proof) {
+    return false;
+  }
+  switch (expense.status) {
+    case "aprovada":
+    case "em_andamento":
+    case "finalizada":
+      return true;
+    case "em_analise":
+    case "devolvido":
+    case "recusada":
+    case "aberta":
+    case "cancelada":
+      return false;
+    default:
+      return assertNever(expense.status);
   }
 }
 

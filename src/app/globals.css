@@ -228,3 +228,145 @@ small {
   color: #fca5a5;
   background: #ef44441a;
 }
+
+.action-pill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.flow-modal-layer .modal-overlay {
+  z-index: 1;
+}
+
+.flow-modal-layer .action-modal {
+  z-index: 2;
+}
+
+.action-modal .modal-lead {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.request-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.maintenance-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.maintenance-ticket-card {
+  background: #141417;
+  border: 1px solid #27272a;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.maintenance-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-ticket-copy {
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.maintenance-status-hint {
+  margin: 0 0 12px;
+  color: #a1a1aa;
+  font-size: 14px;
+}
+
+.maintenance-status-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.maintenance-status-btn {
+  border-radius: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid #27272a;
+  background: #1a1a1e;
+  color: #71717a;
+}
+
+.maintenance-status-btn.next {
+  cursor: pointer;
+  color: #052e16;
+  background: #10b981;
+  border-color: #10b981;
+}
+
+.maintenance-status-btn.current {
+  color: #e4e4e7;
+  border-color: #3f3f46;
+  background: #27272a;
+}
+
+.maintenance-status-btn.cancel {
+  cursor: pointer;
+  color: #fecaca;
+  background: #ef44441a;
+  border-color: #ef444459;
+}
+
+.maintenance-status-btn:disabled:not(.current):not(.next):not(.cancel) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.maintenance-status-btn.next:disabled,
+.maintenance-status-btn.cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.list-cancel-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .maintenance-status-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.icon-button.reloading svg {
+  animation: spin 0.7s linear infinite;
+}
+
+.icon-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.screen-refresh-root {
+  display: contents;
+}

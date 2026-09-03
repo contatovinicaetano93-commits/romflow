@@ -162,7 +162,7 @@ export function Dashboard({
             <strong>{greeting}</strong>
             <span>
               {user.name ? `Olá, ${user.name.split(" ")[0]}! ` : ""}
-              Estamos aqui para agilizar seu pedido de pagamento.
+              Estamos aqui para agilizar suas solicitações.
             </span>
           </div>
         </div>
@@ -176,9 +176,9 @@ export function Dashboard({
             <Sparkles size={14} /> VISÃO CONSOLIDADA
           </span>
           <h2>
-            O fluxo financeiro da <span>{company.name}</span>
+            O fluxo da <span>{company.name}</span>
           </h2>
-          <p>Acompanhe tudo o que exige sua atenção e mantenha os pagamentos em dia.</p>
+          <p>Acompanhe o que pede sua atenção nesta empresa.</p>
         </div>
         {role === "solicitante" ? (
           <button className="primary-button" onClick={() => onNavigate(createScreen)}>
@@ -221,14 +221,13 @@ export function Dashboard({
         <article className="panel chart-panel">
           <header className="panel-header">
             <div>
-              <h3>Despesas por categoria</h3>
-              <p>Distribuição do volume no período</p>
+              <h3>Volume por categoria</h3>
+              <p>Distribuição no período</p>
             </div>
-            <button type="button">Este mês</button>
           </header>
           {isEmpty ? (
             <div className="empty-state">
-              <strong>Nenhuma despesa neste negócio.</strong>
+              <strong>Nenhuma solicitação neste negócio.</strong>
               <span>As categorias aparecem quando houver solicitações.</span>
             </div>
           ) : (
@@ -253,7 +252,7 @@ export function Dashboard({
         <article className="panel trend-panel">
           <header className="panel-header">
             <div>
-              <h3>Tendência de gastos</h3>
+              <h3>Tendência</h3>
               <p>Últimos 6 meses</p>
             </div>
             <span className={previousMonth > 0 && currentMonth >= previousMonth ? "positive-trend" : undefined}>
@@ -263,7 +262,7 @@ export function Dashboard({
           {isEmpty ? (
             <div className="empty-state">
               <strong>Sem tendência ainda.</strong>
-              <span>O gráfico dos últimos 6 meses aparece com as primeiras despesas.</span>
+              <span>O gráfico dos últimos 6 meses aparece com as primeiras solicitações.</span>
             </div>
           ) : (
             <div className="line-chart">

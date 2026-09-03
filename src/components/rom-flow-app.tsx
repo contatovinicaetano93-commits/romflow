@@ -34,6 +34,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [inviteMode, setInviteMode] = useState(Boolean(inviteToken));
   const [loginBanner, setLoginBanner] = useState("");
+  const [reloading, setReloading] = useState(false);
+  const [viewEpoch, setViewEpoch] = useState(0);
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
   const accessibleCompanies = store.accessibleCompanies();
@@ -184,8 +186,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
             subtitle={
               store.user!.role === "solicitante"
-                ? "Acompanhe prazos, documentos e cada etapa até o pagamento."
-                : "Visão completa de todas as solicitações de pagamento da empresa."
+                ? "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado."
+                : "Visão completa das solicitações desta empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
             companyNames={companyNames}
@@ -193,6 +195,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
+            onAction={(expense, action) => store.applyFinanceAction(expense.id, action)}
           />
         );
       case "my-expenses":
@@ -205,6 +208,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onSearch={setSearch}
             onNavigate={navigate}
             onOpen={setSelected}
+            onAction={(expense, action) => store.applyFinanceAction(expense.id, action)}
           />
         );
       case "new-financeiro":
@@ -325,8 +329,22 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           store.switchCompany();
         }}
         onReload={() => {
-          void store.reload();
+          if (reloading) {
+            return;
+          }
+          closePopovers();
+          setSelected(null);
+          setReloading(true);
+          void store
+            .reload()
+            .then(() => {
+              setViewEpoch((value) => value + 1);
+            })
+            .finally(() => {
+              setReloading(false);
+            });
         }}
+        reloading={reloading}
         onLogout={async () => {
           await store.logout();
           setLoginBanner("");
@@ -344,7 +362,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }}
         onToggleMenu={() => setMenuOpen((value) => !value)}
       >
-        {renderScreen(visibleScreen)}
+        <div key={viewEpoch} className="screen-refresh-root">
+          {renderScreen(visibleScreen)}
+        </div>
       </AppShell>
       {selected &&
       (store.user.role !== "solicitante" || selected.requester === store.user.id) ? (
