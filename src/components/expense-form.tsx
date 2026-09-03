@@ -35,7 +35,7 @@ import type {
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
-import { daysFromToday, defaultPaymentDate, isReimbursement, withEventDateObservation } from "@/lib/workflow";
+import { daysFromToday, defaultPaymentDate, isReimbursement, todayIsoDate, withEventDateObservation } from "@/lib/workflow";
 
 const STEPS = [
   { title: "Dados básicos", caption: "Sobre a despesa" },
@@ -340,7 +340,7 @@ export function ExpenseForm({
                     <input
                       type="date"
                       value={form.event_date}
-                      max={new Date().toISOString().slice(0, 10)}
+                      max={todayIsoDate()}
                       onChange={(event) => setField("event_date", event.target.value)}
                       required
                     />

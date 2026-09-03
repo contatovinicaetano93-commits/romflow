@@ -48,6 +48,7 @@ import {
   validatePaymentDate,
   withEventDateObservation,
 } from "@/lib/workflow";
+import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
 import { createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
 export type FinanceAction = RequestAction;
@@ -635,6 +636,19 @@ export async function getInvitationByToken(token: string): Promise<Invitation> {
   };
 }
 
+function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): string[] {
+  if (role !== "master" && role !== "admin_financeiro") {
+    return invitedCompanyIds;
+  }
+  const companyIds = [...invitedCompanyIds];
+  for (const companyId of PERSONAL_BUSINESS_IDS) {
+    if (!companyIds.includes(companyId)) {
+      companyIds.push(companyId);
+    }
+  }
+  return companyIds;
+}
+
 export async function acceptInvitation(token: string, name: string, password: string): Promise<User> {
   const invitation = await getInvitationByToken(token);
   const created = new Date().toISOString();
@@ -644,7 +658,7 @@ export async function acceptInvitation(token: string, name: string, password: st
     email: invitation.email,
     role: invitation.role,
     status: "active",
-    companyIds: invitation.companyIds,
+    companyIds: companyIdsForAcceptedInvite(invitation.role, invitation.companyIds),
     areaIds: invitation.areaIds.length
       ? invitation.areaIds
       : defaultAreasForRole(invitation.role, invitation.role === "solicitante" ? ["financeiro"] : []),

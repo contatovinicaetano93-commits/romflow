@@ -204,17 +204,26 @@ export function isReimbursement(type: ExpenseType): boolean {
   return type === "reembolso_colaborador" || type === "reembolso_cliente";
 }
 
+const APP_TIMEZONE = "America/Sao_Paulo";
+
+export function todayIsoDate(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 export function daysFromToday(date: string): number {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const target = new Date(`${date}T00:00:00`);
-  return Math.round((target.getTime() - start.getTime()) / 86_400_000);
+  const today = Date.parse(`${todayIsoDate()}T00:00:00Z`);
+  const target = Date.parse(`${date}T00:00:00Z`);
+  return Math.round((target - today) / 86_400_000);
 }
 
 export function isoDatePlus(days: number): string {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + days);
+  const date = new Date(`${todayIsoDate()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
