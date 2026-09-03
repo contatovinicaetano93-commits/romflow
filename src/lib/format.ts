@@ -159,6 +159,7 @@ export const AUDIT_LABEL: Record<AuditAction, string> = {
   UPDATE_EXPENSE: "Atualizou solicitação",
   DELETE_EXPENSE: "Excluiu solicitação",
   UPDATE_USER: "Atualizou acesso de usuário",
+  REVOKE_USER: "Excluiu acesso de usuário",
   ATTACH_PROOF: "Anexou recibo de pagamento",
   PROGRESS_EXPENSE: "Colocou em andamento",
   COMPLETE_EXPENSE: "Finalizou solicitação",

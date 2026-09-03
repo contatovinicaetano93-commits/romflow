@@ -204,18 +204,57 @@ export function isReimbursement(type: ExpenseType): boolean {
   return type === "reembolso_colaborador" || type === "reembolso_cliente";
 }
 
+const APP_TIMEZONE = "America/Sao_Paulo";
+
+export function todayIsoDate(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 export function daysFromToday(date: string): number {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const target = new Date(`${date}T00:00:00`);
-  return Math.round((target.getTime() - start.getTime()) / 86_400_000);
+  const today = Date.parse(`${todayIsoDate()}T00:00:00Z`);
+  const target = Date.parse(`${date}T00:00:00Z`);
+  return Math.round((target - today) / 86_400_000);
 }
 
 export function isoDatePlus(days: number): string {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + days);
+  const date = new Date(`${todayIsoDate()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+export function validateEventDate(type: ExpenseType, eventDate: string): void {
+  if (!isReimbursement(type)) {
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+    throw new Error("Informe a data do fato (quando o reembolso ou estorno aconteceu).");
+  }
+  const days = daysFromToday(eventDate);
+  if (days > 0) {
+    throw new Error("A data do fato não pode ser no futuro.");
+  }
+}
+
+export function eventDateObservation(eventDate: string): string {
+  const [year, month, day] = eventDate.split("-");
+  return `Observação da data do fato: ${day}/${month}/${year}.`;
+}
+
+export function withEventDateObservation(description: string, type: ExpenseType, eventDate: string): string {
+  if (!isReimbursement(type) || !eventDate) {
+    return description.trim();
+  }
+  const note = eventDateObservation(eventDate);
+  const body = description.trim();
+  if (body.includes(note) || /data do fato/i.test(body)) {
+    return body;
+  }
+  return body ? `${body}\n\n${note}` : note;
 }
 
 export function validatePaymentDate(type: ExpenseType, date: string, justification: string): void {

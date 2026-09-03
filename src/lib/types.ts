@@ -60,6 +60,7 @@ export type AuditAction =
   | "UPDATE_EXPENSE"
   | "DELETE_EXPENSE"
   | "UPDATE_USER"
+  | "REVOKE_USER"
   | "ATTACH_PROOF"
   | "PROGRESS_EXPENSE"
   | "COMPLETE_EXPENSE"
@@ -140,6 +141,7 @@ export type Expense = {
   area: RequestArea;
   expense_type: ExpenseType;
   event_project: string;
+  event_date: string;
   amount: number;
   category: string;
   payment_method: PaymentMethod;

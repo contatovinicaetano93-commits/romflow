@@ -88,6 +88,59 @@ export function navItemsFor(user: User): NavItem[] {
   return items;
 }
 
+function shortNavLabel(item: NavItem): string {
+  switch (item.screen) {
+    case "dashboard":
+      return "Início";
+    case "new-financeiro":
+      return "Financeiro";
+    case "new-manutencao":
+      return "Manutenção";
+    case "new-compras":
+      return "Compras";
+    case "new-rh":
+      return "RH";
+    case "my-expenses":
+      return "Minhas";
+    case "expenses":
+      return item.label.startsWith("Minhas") ? "Minhas" : "Lista";
+    case "approvals":
+      return "Aprovar";
+    case "payments":
+      return "Pagar";
+    case "reports":
+      return "Relatórios";
+    case "users":
+      return "Usuários";
+    case "audit":
+      return "Auditoria";
+    case "settings":
+      return "Ajustes";
+    default: {
+      const unexpected: never = item.screen;
+      return unexpected;
+    }
+  }
+}
+
+function bottomNavItems(user: User): NavItem[] {
+  const all = navItemsFor(user);
+  if (user.role === "solicitante") {
+    const create = all.filter((item) => item.screen.startsWith("new-"));
+    const mine = all.find((item) => item.screen === "expenses");
+    return [...create.slice(0, 3), ...(mine ? [mine] : [])].slice(0, 4);
+  }
+  const preferred: Screen[] = ["dashboard", "approvals", "payments", "my-expenses"];
+  const picked: NavItem[] = [];
+  for (const screen of preferred) {
+    const item = all.find((entry) => entry.screen === screen);
+    if (item) {
+      picked.push(item);
+    }
+  }
+  return picked.slice(0, 4);
+}
+
 const TITLES: Record<Screen, string> = {
   dashboard: "Visão geral",
   expenses: "Todas as solicitações",
@@ -152,6 +205,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const items = navItemsFor(user);
+  const tabs = bottomNavItems(user);
   const recent = expenses.slice(0, 4);
   const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
 
@@ -244,15 +298,6 @@ export function AppShell({
             <button className="icon-button" onClick={onBack} aria-label="Voltar">
               <ArrowLeft size={18} />
             </button>
-            <button
-              className={cls("icon-button", reloading && "reloading")}
-              onClick={onReload}
-              aria-label="Atualizar página"
-              disabled={reloading}
-              type="button"
-            >
-              <RefreshCw size={18} />
-            </button>
             <div>
               <span>ROM Flow</span>
               <h1>{titleFor(screen)}</h1>
@@ -323,6 +368,38 @@ export function AppShell({
         </header>
         <div className="content-area">{children}</div>
       </div>
+      <button
+        className={cls("refresh-fab", reloading && "reloading")}
+        type="button"
+        onClick={onReload}
+        disabled={reloading}
+        aria-label="Atualizar"
+      >
+        <RefreshCw size={20} />
+        <span>Atualizar</span>
+      </button>
+      <nav className="bottom-nav" aria-label="Navegação do aplicativo">
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          const active = screen === item.screen;
+          return (
+            <button
+              key={item.screen}
+              type="button"
+              className={cls(active && "active")}
+              onClick={() => onNavigate(item.screen)}
+            >
+              <Icon size={20} />
+              {shortNavLabel(item)}
+              {item.screen === "approvals" && pendingCount > 0 ? <em>{pendingCount}</em> : null}
+            </button>
+          );
+        })}
+        <button type="button" className={cls(menuOpen && "active")} onClick={onToggleMenu}>
+          <Menu size={20} />
+          Menu
+        </button>
+      </nav>
     </div>
   );
 }

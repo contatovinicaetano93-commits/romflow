@@ -77,6 +77,7 @@ export function TicketForm({
         area,
         expense_type: type,
         event_project: detail.trim(),
+        event_date: "",
         amount: parseMoneyInput(amount),
         category: area === "rh" ? EXPENSE_TYPE_LABEL[rhType] : urgency,
         payment_method: "pix",

@@ -1,6 +1,8 @@
 import type { Database } from "./types";
 
-export const SEED_REVISION = 6;
+export const SEED_REVISION = 7;
+
+export const PERSONAL_BUSINESS_IDS = ["cmp_romeu_felipe", "cmp_henrique_rocha"] as const;
 
 export const SEED: Database = {
   revision: SEED_REVISION,
@@ -50,6 +52,24 @@ export const SEED: Database = {
       color: "#10B981",
       is_active: true,
     },
+    {
+      id: "cmp_romeu_felipe",
+      name: "Romeu Felipe",
+      legal_name: "Romeu Felipe — contas pessoais",
+      slug: "romeu-felipe",
+      initials: "RF",
+      color: "#F97316",
+      is_active: true,
+    },
+    {
+      id: "cmp_henrique_rocha",
+      name: "Henrique Rocha",
+      legal_name: "Henrique Rocha — contas pessoais",
+      slug: "henrique-rocha",
+      initials: "HR",
+      color: "#06B6D4",
+      is_active: true,
+    },
   ],
   categories: [
     { id: "cat_viagem", name: "Viagem", color: "#6366F1", is_active: true },
@@ -73,6 +93,8 @@ export const SEED: Database = {
         "cmp_academy",
         "cmp_concept_brasil",
         "cmp_concept_iguatemi",
+        "cmp_romeu_felipe",
+        "cmp_henrique_rocha",
       ],
       created: "2026-01-10T12:00:00.000Z",
     },

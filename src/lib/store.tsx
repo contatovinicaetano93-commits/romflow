@@ -97,6 +97,8 @@ type StoreValue = {
   validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
+  revokeUserAccess: (userId: string) => Promise<void>;
+  cancelInvitation: (invitationId: string) => Promise<void>;
   updateUserAccess: (
     userId: string,
     role: Role,
@@ -331,6 +333,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshData],
   );
 
+  const revokeUserAccess = useCallback(
+    async (userId: string) => {
+      await api("/api/users/revoke", {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      });
+      await refreshData();
+    },
+    [refreshData],
+  );
+
+  const cancelInvitation = useCallback(
+    async (invitationId: string) => {
+      await api("/api/invitations/cancel", {
+        method: "POST",
+        body: JSON.stringify({ invitationId }),
+      });
+      await refreshData();
+    },
+    [refreshData],
+  );
+
   const updateUserAccess = useCallback(
     async (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => {
       const result = await api<{ user: User }>("/api/users", {
@@ -420,6 +444,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       validateInvite,
       acceptInvite,
       toggleUserStatus,
+      revokeUserAccess,
+      cancelInvitation,
       updateUserAccess,
       updateInvitationAccess,
       createCompany,
@@ -433,6 +459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       accessibleCompanies,
       applyFinanceAction,
       bootstrapAdmin,
+      cancelInvitation,
       company,
       companyExpenses,
       createCategory,
@@ -449,6 +476,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectCompany,
       switchCompany,
       reload,
+      revokeUserAccess,
       toggleUserStatus,
       updateCategory,
       updateInvitationAccess,
