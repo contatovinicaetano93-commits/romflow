@@ -5,7 +5,6 @@ import { cookies } from "next/headers";
 import { PERSONAL_BUSINESS_IDS, SEED } from "@/lib/seed";
 import type { User, UserStatus } from "@/lib/types";
 import { getDb } from "@/lib/db";
-import { uid } from "@/lib/db/ids";
 import { categories, companies, userAreas, userCompanies, users } from "@/lib/db/schema";
 import { defaultAreasForRole, parseAreas, parseRole } from "@/lib/workflow";
 import { sql } from "drizzle-orm";
@@ -22,6 +21,14 @@ function secretKey(): Uint8Array {
     throw new Error("SESSION_SECRET is not set.");
   }
   return new TextEncoder().encode(secret);
+}
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+export function assertPassword(password: string): void {
+  if (password.trim().length < MIN_PASSWORD_LENGTH) {
+    throw new Error("A senha deve ter no mínimo 8 caracteres.");
+  }
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -249,6 +256,3 @@ export async function ensureSeeded(): Promise<void> {
   }
 }
 
-export function newUserId(): string {
-  return uid("usr");
-}

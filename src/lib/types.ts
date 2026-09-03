@@ -80,7 +80,6 @@ export type FinanceAction = RequestAction;
 
 export type FinanceActionPayload = {
   note?: string;
-  scheduledDate?: string;
   proof?: StoredFile | null;
   receipt?: StoredFile | null;
 };
@@ -131,7 +130,8 @@ export type StoredFile = {
   name: string;
   size: number;
   type: string;
-  dataUrl: string;
+  url?: string;
+  dataUrl?: string;
 };
 
 export type Expense = {

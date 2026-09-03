@@ -23,7 +23,7 @@ import {
 } from "@/lib/format";
 import type { Expense, FinanceAction, FinanceActionPayload, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import { fileToStored } from "@/lib/files";
+import { fileHref, fileToStored } from "@/lib/files";
 import { allowedActions } from "@/lib/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { StatusBadge } from "./status-badge";
@@ -364,7 +364,7 @@ export function ExpenseDrawer({
               </>
             ) : null}
             {expense.receipt ? (
-              <a href={expense.receipt.dataUrl} download={expense.receipt.name}>
+              <a href={fileHref(expense.receipt)} download={expense.receipt.name} target="_blank" rel="noreferrer">
                 <Download size={14} /> {expense.receipt.name}
               </a>
             ) : (
@@ -373,7 +373,7 @@ export function ExpenseDrawer({
             {expense.payment_proof ? (
               <p>
                 <FileText size={14} /> Recibo:{" "}
-                <a href={expense.payment_proof.dataUrl} download={expense.payment_proof.name}>
+                <a href={fileHref(expense.payment_proof)} download={expense.payment_proof.name} target="_blank" rel="noreferrer">
                   {expense.payment_proof.name}
                 </a>
               </p>

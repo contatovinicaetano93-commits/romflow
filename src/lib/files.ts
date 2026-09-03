@@ -4,6 +4,10 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_DATA_URL_CHARS = 1_400_000;
 const MAX_IMAGE_EDGE = 1600;
 
+export function fileHref(file: StoredFile): string {
+  return file.url || file.dataUrl || "";
+}
+
 function readDataUrl(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -22,7 +26,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function compressImage(file: File): Promise<StoredFile> {
+function dataUrlToFile(dataUrl: string, name: string, type: string): File {
+  const comma = dataUrl.indexOf(",");
+  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new File([bytes], name, { type });
+}
+
+async function compressImage(file: File): Promise<File> {
   const original = await readDataUrl(file);
   const image = await loadImage(original);
   const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(image.width, image.height));
@@ -45,17 +60,11 @@ async function compressImage(file: File): Promise<StoredFile> {
   if (dataUrl.length > MAX_DATA_URL_CHARS) {
     throw new Error("A imagem continua grande demais. Tente outra foto mais leve.");
   }
-  const comma = dataUrl.indexOf(",");
-  const size = comma >= 0 ? Math.ceil((dataUrl.length - comma - 1) * 0.75) : dataUrl.length;
-  return {
-    name: `${file.name.replace(/\.[^.]+$/, "") || "comprovante"}.jpg`,
-    size,
-    type: "image/jpeg",
-    dataUrl,
-  };
+  const name = `${file.name.replace(/\.[^.]+$/, "") || "comprovante"}.jpg`;
+  return dataUrlToFile(dataUrl, name, "image/jpeg");
 }
 
-export async function fileToStored(file: File): Promise<StoredFile> {
+async function prepareUploadFile(file: File): Promise<File> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error("O arquivo deve ter no máximo 10 MB.");
   }
@@ -66,5 +75,22 @@ export async function fileToStored(file: File): Promise<StoredFile> {
   if (dataUrl.length > MAX_DATA_URL_CHARS) {
     throw new Error("Este PDF está grande demais. Envie um arquivo de até 1 MB ou uma foto da nota.");
   }
-  return { name: file.name, size: file.size, type: file.type, dataUrl };
+  return file;
+}
+
+export async function fileToStored(file: File): Promise<StoredFile> {
+  const prepared = await prepareUploadFile(file);
+  const form = new FormData();
+  form.append("file", prepared);
+  const response = await fetch("/api/files", {
+    method: "POST",
+    body: form,
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = (await response.json().catch(() => ({}))) as { file?: StoredFile; error?: string };
+  if (!response.ok || !body.file) {
+    throw new Error(body.error || "Não foi possível enviar o arquivo.");
+  }
+  return body.file;
 }

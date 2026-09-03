@@ -379,22 +379,19 @@ export function isAdminInbox(expense: Expense): boolean {
 }
 
 export function isWaitingPayment(expense: Expense): boolean {
-  if (expense.payment_proof) {
+  if (expense.payment_proof || expense.amount <= 0) {
     return false;
   }
-  switch (expense.status) {
-    case "aprovada":
-    case "em_andamento":
-    case "finalizada":
-      return true;
-    case "em_analise":
-    case "devolvido":
-    case "recusada":
-    case "aberta":
-    case "cancelada":
-      return false;
+  switch (expense.area) {
+    case "financeiro":
+    case "rh":
+      return expense.status === "aprovada";
+    case "compras":
+      return expense.status === "aprovada" || expense.status === "em_andamento" || expense.status === "finalizada";
+    case "manutencao":
+      return expense.status === "finalizada";
     default:
-      return assertNever(expense.status);
+      return assertNever(expense.area);
   }
 }
 

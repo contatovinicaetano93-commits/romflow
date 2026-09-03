@@ -4,7 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { Camera, Upload, X } from "lucide-react";
 import { AREA_LABEL, EXPENSE_TYPE_LABEL, maskMoneyInput, parseMoneyInput } from "@/lib/format";
 import type { Company, Expense, ExpenseType, RequestArea, StoredFile, User } from "@/lib/types";
-import { initialStatus } from "@/lib/workflow";
+import { initialStatus, todayIsoDate } from "@/lib/workflow";
 import { fileToStored } from "@/lib/files";
 
 const RH_TYPES: ExpenseType[] = [
@@ -88,7 +88,7 @@ export function TicketForm({
         agency: "",
         account: "",
         boleto_code: "",
-        max_payment_date: new Date().toISOString().slice(0, 10),
+        max_payment_date: todayIsoDate(),
         payment_date_justification: "",
         receipt_justification: "",
         receipt: stored,
@@ -119,7 +119,7 @@ export function TicketForm({
                   ? "Depois, em Minhas solicitações, marque Em andamento, Finalizado ou Cancelado."
                   : area === "compras"
                     ? "Abra o pedido. O admin de compras valida e anda o chamado."
-                    : "Abra a solicitação de RH. O admin de RH valida e finaliza."}
+                    : "Abra a solicitação. O admin de RH analisa, devolve, aprova ou recusa."}
               </p>
             </div>
           </div>
