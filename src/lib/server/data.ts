@@ -44,7 +44,9 @@ import {
   parseExpenseType,
   parseRole,
   parseStatus,
+  validateEventDate,
   validatePaymentDate,
+  withEventDateObservation,
 } from "@/lib/workflow";
 import { createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
@@ -86,6 +88,7 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
     area: parseArea(row.area),
     expense_type: parseExpenseType(row.expenseType),
     event_project: row.eventProject,
+    event_date: row.eventDate ?? "",
     amount: row.amount,
     category: row.category,
     payment_method: row.paymentMethod as PaymentMethod,
@@ -402,10 +405,12 @@ export async function createExpenseRecord(
   }
   if (input.area === "financeiro") {
     validatePaymentDate(input.expense_type, input.max_payment_date, input.payment_date_justification);
+    validateEventDate(input.expense_type, input.event_date);
   }
   const created = new Date().toISOString();
   const expense: Expense = {
     ...input,
+    description: withEventDateObservation(input.description, input.expense_type, input.event_date),
     requester: actor.id,
     status: initialStatus(input.area),
     payment_proof: null,
@@ -423,6 +428,7 @@ export async function createExpenseRecord(
       area: expense.area,
       expenseType: expense.expense_type,
       eventProject: expense.event_project,
+      eventDate: expense.event_date,
       amount: expense.amount,
       category: expense.category,
       paymentMethod: expense.payment_method,
@@ -761,6 +767,44 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
     .update(users)
     .set({ status: row.status === "active" ? "inactive" : "active" })
     .where(eq(users.id, userId));
+}
+
+export async function revokeUserAccessRecord(actor: User, userId: string): Promise<void> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode excluir acessos.");
+  }
+  if (actor.id === userId) {
+    throw new Error("Você não pode excluir o próprio acesso.");
+  }
+  const db = getDb();
+  const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!row) {
+    throw new Error("Usuário não encontrado.");
+  }
+  if (parseRole(row.role) === "master") {
+    const adminRows = await db.select({ id: users.id, role: users.role, status: users.status }).from(users);
+    const otherMasters = adminRows.filter(
+      (item) => item.id !== userId && item.status === "active" && parseRole(item.role) === "master",
+    );
+    if (otherMasters.length === 0) {
+      throw new Error("É preciso manter ao menos um master ativo.");
+    }
+  }
+  await db.update(users).set({ status: "inactive" }).where(eq(users.id, userId));
+  await writeAudit(actor.id, "REVOKE_USER", userId, row.status, "inactive");
+}
+
+export async function cancelInvitationRecord(actor: User, invitationId: string): Promise<void> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode excluir convites.");
+  }
+  const db = getDb();
+  const [row] = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
+  if (!row || row.accepted) {
+    throw new Error("Convite inválido ou já utilizado.");
+  }
+  await db.delete(invitations).where(eq(invitations.id, invitationId));
+  await writeAudit(actor.id, "REVOKE_USER", invitationId, row.email, "convite cancelado");
 }
 
 export async function createCompanyRecord(input: { name: string; color: string }): Promise<Company> {

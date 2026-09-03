@@ -35,7 +35,7 @@ import type {
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { fileToStored } from "@/lib/files";
-import { daysFromToday, defaultPaymentDate, isReimbursement } from "@/lib/workflow";
+import { daysFromToday, defaultPaymentDate, isReimbursement, withEventDateObservation } from "@/lib/workflow";
 
 const STEPS = [
   { title: "Dados básicos", caption: "Sobre a despesa" },
@@ -92,6 +92,7 @@ export function ExpenseForm({
     description: "",
     expense_type: "fornecedor" as ExpenseType,
     event_project: "",
+    event_date: "",
     amount: "",
     category: categoryChoices[0]?.name ?? "Software",
     payment_method: "pix" as PaymentMethod,
@@ -121,9 +122,9 @@ export function ExpenseForm({
     return { label: "Prazo confortável", detail: `${days} dias para pagamento`, tone: "green" };
   }, [form.max_payment_date, now]);
 
-  const needsDateJustification =
-    isReimbursement(form.expense_type) || daysFromToday(form.max_payment_date) < 15;
-  const dateCap = isReimbursement(form.expense_type) ? defaultPaymentDate(form.expense_type) : undefined;
+  const reimbursement = isReimbursement(form.expense_type);
+  const needsDateJustification = reimbursement || daysFromToday(form.max_payment_date) < 15;
+  const dateCap = reimbursement ? defaultPaymentDate(form.expense_type) : undefined;
 
   const canContinue =
     step === 0
@@ -132,6 +133,7 @@ export function ExpenseForm({
             form.description &&
             form.amount &&
             form.max_payment_date &&
+            (!reimbursement || form.event_date) &&
             (!needsDateJustification || form.payment_date_justification.trim()),
         )
       : step === 1
@@ -188,10 +190,11 @@ export function ExpenseForm({
     try {
       await onCreated({
         title: form.title,
-        description: form.description,
+        description: withEventDateObservation(form.description, form.expense_type, form.event_date),
         area: "financeiro",
         expense_type: form.expense_type,
         event_project: form.event_project,
+        event_date: form.event_date,
         amount: parseMoneyInput(form.amount),
         category: form.category,
         payment_method: form.payment_method,
@@ -300,6 +303,11 @@ export function ExpenseForm({
                   value={form.description}
                   maxLength={500}
                   onChange={(event) => setField("description", event.target.value)}
+                  placeholder={
+                    reimbursement
+                      ? "Descreva o fato e a data como observação. Ex.: almoço com cliente no dia 12/08."
+                      : undefined
+                  }
                   required
                 />
                 <small className="char-count">{form.description.length}/500</small>
@@ -324,13 +332,30 @@ export function ExpenseForm({
                   ))}
                 </select>
               </label>
-              <label>
-                Evento / Projeto
-                <input
-                  value={form.event_project}
-                  onChange={(event) => setField("event_project", event.target.value)}
-                />
-              </label>
+              {reimbursement ? (
+                <label>
+                  Data do fato <span>*</span>
+                  <div className="date-input">
+                    <CalendarDays size={16} />
+                    <input
+                      type="date"
+                      value={form.event_date}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setField("event_date", event.target.value)}
+                      required
+                    />
+                  </div>
+                  <small className="char-count">Quando o gasto ou o estorno aconteceu.</small>
+                </label>
+              ) : (
+                <label>
+                  Evento / Projeto
+                  <input
+                    value={form.event_project}
+                    onChange={(event) => setField("event_project", event.target.value)}
+                  />
+                </label>
+              )}
               <label>
                 Categoria
                 <select
@@ -617,6 +642,13 @@ export function ExpenseForm({
                 <strong>{formatDate(form.max_payment_date)}</strong>
                 <span>{urgency.detail}</span>
               </div>
+              {reimbursement && form.event_date ? (
+                <div>
+                  <small>Data do fato</small>
+                  <strong>{formatDate(form.event_date)}</strong>
+                  <span>Quando o reembolso ou estorno aconteceu</span>
+                </div>
+              ) : null}
               <div>
                 <small>Documento</small>
                 <strong>{receipt?.name || "Sem nota fiscal"}</strong>

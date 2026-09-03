@@ -96,6 +96,7 @@ export const expenses = pgTable("expenses", {
   area: text("area").notNull().default("financeiro"),
   expenseType: text("expense_type").notNull(),
   eventProject: text("event_project").notNull().default(""),
+  eventDate: text("event_date").notNull().default(""),
   amount: doublePrecision("amount").notNull(),
   category: text("category").notNull(),
   paymentMethod: text("payment_method").notNull(),

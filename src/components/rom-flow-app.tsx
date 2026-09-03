@@ -285,6 +285,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onToggle={async (userId) => {
               await store.toggleUserStatus(userId);
             }}
+            onRevoke={store.revokeUserAccess}
+            onCancelInvite={store.cancelInvitation}
           />
         );
       case "audit":

@@ -337,6 +337,11 @@ export function ExpenseDrawer({
                 <small>Complemento</small> {expense.event_project}
               </p>
             ) : null}
+            {expense.event_date ? (
+              <p>
+                <small>Data do fato</small> {formatDate(expense.event_date)}
+              </p>
+            ) : null}
             <p>
               <small>Solicitante</small> {requester?.name ?? "—"}
             </p>

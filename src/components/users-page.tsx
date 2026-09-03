@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Check, Copy, Link2, Mail, Pencil, Search, Shield, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Link2, Mail, Pencil, Search, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { ROLE_CLASS, ROLE_LABEL, AREA_LABEL, cls, formatDate } from "@/lib/format";
 import type { Company, Invitation, RequestArea, Role, User } from "@/lib/types";
 import { REQUEST_AREAS, areaForAdminRole } from "@/lib/workflow";
@@ -156,6 +156,8 @@ export function UsersPage({
   onUpdateUser,
   onUpdateInvitation,
   onToggle,
+  onRevoke,
+  onCancelInvite,
 }: {
   users: User[];
   invitations: Invitation[];
@@ -175,6 +177,8 @@ export function UsersPage({
     areaIds: RequestArea[],
   ) => Promise<void>;
   onToggle: (userId: string) => void;
+  onRevoke: (userId: string) => Promise<void>;
+  onCancelInvite: (invitationId: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -185,13 +189,22 @@ export function UsersPage({
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<{ email: string; link: string } | null>(null);
+  const [created, setCreated] = useState<{
+    email: string;
+    link: string;
+    emailSent: boolean;
+    emailError?: string;
+  } | null>(null);
   const [editing, setEditing] = useState<EditingTarget | null>(null);
   const [editRole, setEditRole] = useState<Role>("solicitante");
   const [editSelected, setEditSelected] = useState<string[]>([]);
   const [editAreas, setEditAreas] = useState<RequestArea[]>(["financeiro"]);
   const [editError, setEditError] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState<{ kind: "user" | "invite"; id: string; label: string } | null>(
+    null,
+  );
+  const [revoking, setRevoking] = useState(false);
 
   const pendingInvites = useMemo(
     () => invitations.filter((item) => !item.accepted),
@@ -257,7 +270,12 @@ export function UsersPage({
     try {
       const invitation = await onInvite(email, role, selected, areas);
       const link = signupUrl(invitation.token);
-      setCreated({ email: invitation.email, link });
+      setCreated({
+        email: invitation.email,
+        link,
+        emailSent: Boolean(invitation.emailSent),
+        emailError: invitation.emailError,
+      });
       await copyLink(link, "created");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível concluir a operação.");
@@ -295,6 +313,26 @@ export function UsersPage({
       setEditError(caught instanceof Error ? caught.message : "Não foi possível salvar o acesso.");
     } finally {
       setEditSubmitting(false);
+    }
+  }
+
+  async function handleRevoke() {
+    if (!confirmRevoke) {
+      return;
+    }
+    setRevoking(true);
+    setError("");
+    try {
+      if (confirmRevoke.kind === "user") {
+        await onRevoke(confirmRevoke.id);
+      } else {
+        await onCancelInvite(confirmRevoke.id);
+      }
+      setConfirmRevoke(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível excluir o acesso.");
+    } finally {
+      setRevoking(false);
     }
   }
 
@@ -406,6 +444,20 @@ export function UsersPage({
                       >
                         <i /> {item.status === "active" ? "Ativo" : "Inativo"}
                       </button>
+                      <button
+                        className="danger-text-button"
+                        type="button"
+                        disabled={item.id === currentUserId}
+                        onClick={() =>
+                          setConfirmRevoke({
+                            kind: "user",
+                            id: item.id,
+                            label: item.name,
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Excluir acesso
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -450,6 +502,19 @@ export function UsersPage({
                     {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
                     {copied === item.id ? "Link copiado" : "Copiar link"}
                   </button>
+                  <button
+                    className="danger-text-button"
+                    type="button"
+                    onClick={() =>
+                      setConfirmRevoke({
+                        kind: "invite",
+                        id: item.id,
+                        label: item.email,
+                      })
+                    }
+                  >
+                    <Trash2 size={14} /> Excluir convite
+                  </button>
                 </div>
               </div>
             );
@@ -473,6 +538,11 @@ export function UsersPage({
                   </p>
                 </div>
               </header>
+              <div className={cls("mail-status", created.emailSent ? "sent" : "failed")}>
+                {created.emailSent
+                  ? `E-mail enviado para ${created.email}.`
+                  : `O e-mail não saiu${created.emailError ? `: ${created.emailError}` : "."} Copie o link e envie por outro canal.`}
+              </div>
               <div className="signup-link-box">
                 <code>{created.link}</code>
                 <button
@@ -594,6 +664,42 @@ export function UsersPage({
               </button>
             </footer>
           </form>
+        </div>
+      ) : null}
+
+      {confirmRevoke ? (
+        <div className="modal-layer">
+          <button className="modal-overlay" onClick={() => !revoking && setConfirmRevoke(null)} />
+          <div className="action-modal">
+            <header>
+              <div className="modal-icon">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3>Excluir acesso</h3>
+                <p className="modal-lead">
+                  {confirmRevoke.kind === "user"
+                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. O histórico de solicitações permanece.`
+                    : `O convite de ${confirmRevoke.label} será cancelado.`}
+                </p>
+              </div>
+            </header>
+            {error ? <div className="form-error">{error}</div> : null}
+            <footer>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={revoking}
+                onClick={() => setConfirmRevoke(null)}
+              >
+                Cancelar
+              </button>
+              <button className="danger-button" type="button" disabled={revoking} onClick={() => void handleRevoke()}>
+                {revoking ? <span className="spinner" /> : null}
+                {revoking ? "Excluindo..." : "Excluir acesso"}
+              </button>
+            </footer>
+          </div>
         </div>
       ) : null}
     </div>

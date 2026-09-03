@@ -2,7 +2,7 @@ import { compare, hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
-import { SEED } from "@/lib/seed";
+import { PERSONAL_BUSINESS_IDS, SEED } from "@/lib/seed";
 import type { User, UserStatus } from "@/lib/types";
 import { getDb } from "@/lib/db";
 import { uid } from "@/lib/db/ids";
@@ -126,22 +126,64 @@ export async function userCount(): Promise<number> {
   return rows.length;
 }
 
+async function ensureSeedCompanies(): Promise<void> {
+  const db = getDb();
+  const existing = await db.select({ id: companies.id }).from(companies);
+  const present = new Set(existing.map((row) => row.id));
+  const missing = SEED.companies.filter((item) => !present.has(item.id));
+  if (missing.length === 0) {
+    return;
+  }
+  await db.insert(companies).values(
+    missing.map((item) => ({
+      id: item.id,
+      name: item.name,
+      legalName: item.legal_name,
+      slug: item.slug,
+      initials: item.initials,
+      color: item.color,
+      isActive: item.is_active,
+    })),
+  );
+}
+
+async function grantPersonalBusinessesToFinance(): Promise<void> {
+  const db = getDb();
+  const userRows = await db.select({ id: users.id, role: users.role }).from(users);
+  if (userRows.length === 0) {
+    return;
+  }
+  const links = await db.select().from(userCompanies);
+  const owned = new Set(links.map((item) => `${item.userId}:${item.companyId}`));
+  const next: Array<{ userId: string; companyId: string }> = [];
+  for (const row of userRows) {
+    let role: ReturnType<typeof parseRole>;
+    try {
+      role = parseRole(row.role);
+    } catch {
+      continue;
+    }
+    if (role !== "master" && role !== "admin_financeiro") {
+      continue;
+    }
+    for (const companyId of PERSONAL_BUSINESS_IDS) {
+      const key = `${row.id}:${companyId}`;
+      if (owned.has(key)) {
+        continue;
+      }
+      owned.add(key);
+      next.push({ userId: row.id, companyId });
+    }
+  }
+  if (next.length === 0) {
+    return;
+  }
+  await db.insert(userCompanies).values(next);
+}
+
 export async function ensureSeeded(): Promise<void> {
   const db = getDb();
-  const [companyRow] = await db.select({ id: companies.id }).from(companies).limit(1);
-  if (!companyRow) {
-    await db.insert(companies).values(
-      SEED.companies.map((item) => ({
-        id: item.id,
-        name: item.name,
-        legalName: item.legal_name,
-        slug: item.slug,
-        initials: item.initials,
-        color: item.color,
-        isActive: item.is_active,
-      })),
-    );
-  }
+  await ensureSeedCompanies();
 
   const [categoryRow] = await db.select({ id: categories.id }).from(categories).limit(1);
   if (!categoryRow) {
@@ -166,9 +208,12 @@ export async function ensureSeeded(): Promise<void> {
     await db.execute(sql`UPDATE expenses SET status = 'aprovada' WHERE status IN ('agendada', 'paga')`);
     await db.execute(sql`UPDATE expenses SET expense_type = 'reembolso_colaborador' WHERE expense_type = 'reembolso'`);
     await db.execute(sql`UPDATE expenses SET expense_type = 'outros' WHERE expense_type IN ('adiantamento', 'impostos')`);
+    await db.execute(sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS event_date text NOT NULL DEFAULT ''`);
   } catch {
     // Columns may not exist until drizzle push; next request after schema sync will migrate.
   }
+
+  await grantPersonalBusinessesToFinance();
 
   if ((await userCount()) > 0) {
     return;

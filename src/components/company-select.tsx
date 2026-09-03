@@ -74,7 +74,7 @@ export function CompanySelect({
                     <div className="company-card-pattern" />
                     <div className="company-card-icon">{company.initials}</div>
                     <div className="company-card-copy">
-                      <small>EMPRESA</small>
+                      <small>NEGÓCIO</small>
                       <strong>{company.name}</strong>
                       <em>{company.legal_name}</em>
                     </div>

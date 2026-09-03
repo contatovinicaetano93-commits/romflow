@@ -218,6 +218,36 @@ export function isoDatePlus(days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function validateEventDate(type: ExpenseType, eventDate: string): void {
+  if (!isReimbursement(type)) {
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+    throw new Error("Informe a data do fato (quando o reembolso ou estorno aconteceu).");
+  }
+  const days = daysFromToday(eventDate);
+  if (days > 0) {
+    throw new Error("A data do fato não pode ser no futuro.");
+  }
+}
+
+export function eventDateObservation(eventDate: string): string {
+  const [year, month, day] = eventDate.split("-");
+  return `Observação da data do fato: ${day}/${month}/${year}.`;
+}
+
+export function withEventDateObservation(description: string, type: ExpenseType, eventDate: string): string {
+  if (!isReimbursement(type) || !eventDate) {
+    return description.trim();
+  }
+  const note = eventDateObservation(eventDate);
+  const body = description.trim();
+  if (body.includes(note) || /data do fato/i.test(body)) {
+    return body;
+  }
+  return body ? `${body}\n\n${note}` : note;
+}
+
 export function validatePaymentDate(type: ExpenseType, date: string, justification: string): void {
   const days = daysFromToday(date);
   if (days < 0) {
