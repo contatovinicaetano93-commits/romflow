@@ -213,8 +213,10 @@ export function UsersPage({
 
   const filtered = useMemo(
     () =>
-      users.filter((item) =>
-        `${item.name} ${item.email} ${item.role}`.toLowerCase().includes(query.toLowerCase()),
+      users.filter(
+        (item) =>
+          item.status === "active" &&
+          `${item.name} ${item.email} ${item.role}`.toLowerCase().includes(query.toLowerCase()),
       ),
     [query, users],
   );
