@@ -49,6 +49,7 @@ export function ExpenseList({
   const [areaFilter, setAreaFilter] = useState<"todas" | RequestArea>("todas");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
   const filtered = useMemo(
     () =>
@@ -74,9 +75,12 @@ export function ExpenseList({
       return;
     }
     setBusyId(item.id);
+    setActionError("");
     try {
       await onAction(item, action);
       setConfirmCancel(null);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Não foi possível atualizar o chamado.");
     } finally {
       setBusyId(null);
     }
@@ -94,6 +98,7 @@ export function ExpenseList({
           <Plus size={18} /> Nova Solicitação
         </button>
       </section>
+      {actionError ? <div className="form-error">{actionError}</div> : null}
       <section className="list-summary">
         <div>
           <span>{filtered.length}</span>

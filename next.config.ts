@@ -7,7 +7,7 @@ const sentryDsn =
   "https://87bdbc103efa97ec11e6f39327fd97cb@o4512013512540160.ingest.us.sentry.io/4512013519618048";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@neondatabase/serverless", "bcryptjs"],
+  serverExternalPackages: ["@neondatabase/serverless", "bcryptjs", "@vercel/blob"],
   env: {
     SENTRY_DSN: sentryDsn,
     NEXT_PUBLIC_SENTRY_DSN: sentryDsn,

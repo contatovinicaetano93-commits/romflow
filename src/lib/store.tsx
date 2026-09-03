@@ -386,10 +386,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const createCompany = useCallback(
     async (input: { name: string; color: string }) => {
-      await api("/api/companies", {
+      const result = await api<{ company: Company }>("/api/companies", {
         method: "POST",
         body: JSON.stringify(input),
       });
+      setUser((current) =>
+        current && !current.companyIds.includes(result.company.id)
+          ? { ...current, companyIds: [...current.companyIds, result.company.id] }
+          : current,
+      );
       await refreshData();
     },
     [refreshData],

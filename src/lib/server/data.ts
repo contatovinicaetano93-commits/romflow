@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { canAccessCompany } from "@/lib/access";
 import { getDb } from "@/lib/db";
-import { uid } from "@/lib/db/ids";
+import { uid, inviteToken } from "@/lib/db/ids";
 import {
   auditLogs,
   categories,
@@ -48,14 +48,14 @@ import {
   validatePaymentDate,
   withEventDateObservation,
 } from "@/lib/workflow";
+import { persistStoredFile, publicStoredFile } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
-import { createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
+import { assertPassword, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
 export type FinanceAction = RequestAction;
 
 export type FinanceActionPayload = {
   note?: string;
-  scheduledDate?: string;
   proof?: StoredFile | null;
   receipt?: StoredFile | null;
 };
@@ -103,8 +103,8 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
     max_payment_date: row.maxPaymentDate,
     payment_date_justification: row.paymentDateJustification ?? "",
     receipt_justification: row.receiptJustification,
-    receipt: row.receipt ?? null,
-    payment_proof: row.paymentProof ?? null,
+    receipt: publicStoredFile(row.receipt ?? null),
+    payment_proof: publicStoredFile(row.paymentProof ?? null),
     company: row.companyId,
     requester: row.requesterId,
     approver: row.approverId,
@@ -291,6 +291,23 @@ async function writeAudit(
     });
 }
 
+function usersForSnapshot(actor: User, allUsers: User[], visibleExpenses: Expense[]): User[] {
+  if (isMaster(actor.role)) {
+    return allUsers;
+  }
+  if (actor.role === "solicitante") {
+    return [actor];
+  }
+  const ids = new Set<string>([actor.id]);
+  for (const expense of visibleExpenses) {
+    ids.add(expense.requester);
+    if (expense.approver) {
+      ids.add(expense.approver);
+    }
+  }
+  return allUsers.filter((item) => ids.has(item.id));
+}
+
 export async function getSnapshot(actor: User): Promise<Database> {
   const db = getDb();
   const companyRows = await db.select().from(companies);
@@ -310,6 +327,8 @@ export async function getSnapshot(actor: User): Promise<Database> {
     .map(mapExpense)
     .filter((item) => canSeeExpense(actor, item));
 
+  const visibleUsers = usersForSnapshot(actor, allUsers, visibleExpenses);
+
   const mailRows = isMaster(actor.role)
     ? await db.select().from(emailLogs).orderBy(desc(emailLogs.created))
     : [];
@@ -318,7 +337,7 @@ export async function getSnapshot(actor: User): Promise<Database> {
     revision: 1,
     companies: visibleCompanies.map(mapCompany),
     categories: categoryRows.map(mapCategory),
-    users: allUsers,
+    users: visibleUsers,
     invitations: allInvites,
     expenses: visibleExpenses,
     auditLogs: logs.map((item) => ({
@@ -359,6 +378,7 @@ export async function bootstrapAdmin(name: string, email: string, password: stri
   if ((await userCount()) > 0) {
     throw new Error("Já existe um acesso cadastrado.");
   }
+  assertPassword(password);
   const db = getDb();
   const companyRows = await db.select({ id: companies.id }).from(companies);
   const created = new Date().toISOString();
@@ -409,11 +429,13 @@ export async function createExpenseRecord(
     validateEventDate(input.expense_type, input.event_date);
   }
   const created = new Date().toISOString();
+  const receipt = await persistStoredFile(input.receipt, "receipts");
   const expense: Expense = {
     ...input,
     description: withEventDateObservation(input.description, input.expense_type, input.event_date),
     requester: actor.id,
     status: initialStatus(input.area),
+    receipt,
     payment_proof: null,
     approver: null,
     id: uid("exp"),
@@ -518,6 +540,8 @@ export async function applyFinanceActionRecord(
       throw new Error(`Ação não suportada: ${exhaustive}`);
     }
   }
+  const paymentProof = await persistStoredFile(payload?.proof ?? current.payment_proof, "proofs");
+  const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts");
   const updated: Expense = {
     ...current,
     status,
@@ -525,8 +549,8 @@ export async function applyFinanceActionRecord(
       ? current.approver
       : actor.id,
     review_note: payload?.note ?? current.review_note,
-    payment_proof: payload?.proof ?? current.payment_proof,
-    receipt: payload?.receipt ?? current.receipt,
+    payment_proof: paymentProof,
+    receipt,
     updated: new Date().toISOString(),
   };
   await db
@@ -577,7 +601,7 @@ export async function createInvitationRecord(
     role: resolvedRole,
     companyIds: resolvedCompanies,
     areaIds: resolvedAreas,
-    token: uid("token"),
+    token: inviteToken(),
     invitedBy: actor.id,
     created: new Date().toISOString(),
     expires: new Date(Date.now() + 30 * 86_400_000).toISOString(),
@@ -650,6 +674,7 @@ function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): s
 }
 
 export async function acceptInvitation(token: string, name: string, password: string): Promise<User> {
+  assertPassword(password);
   const invitation = await getInvitationByToken(token);
   const created = new Date().toISOString();
   const nextUser: User = {
@@ -821,7 +846,10 @@ export async function cancelInvitationRecord(actor: User, invitationId: string):
   await writeAudit(actor.id, "REVOKE_USER", invitationId, row.email, "convite cancelado");
 }
 
-export async function createCompanyRecord(input: { name: string; color: string }): Promise<Company> {
+export async function createCompanyRecord(
+  actor: User,
+  input: { name: string; color: string },
+): Promise<Company> {
   const slug = input.name
     .toLowerCase()
     .normalize("NFD")
@@ -842,17 +870,29 @@ export async function createCompanyRecord(input: { name: string; color: string }
     color: input.color,
     is_active: true,
   };
-  await getDb()
-    .insert(companies)
-    .values({
-      id: companyItem.id,
-      name: companyItem.name,
-      legalName: companyItem.legal_name,
-      slug: companyItem.slug,
-      initials: companyItem.initials,
-      color: companyItem.color,
-      isActive: true,
-    });
+  const db = getDb();
+  await db.insert(companies).values({
+    id: companyItem.id,
+    name: companyItem.name,
+    legalName: companyItem.legal_name,
+    slug: companyItem.slug,
+    initials: companyItem.initials,
+    color: companyItem.color,
+    isActive: true,
+  });
+  const adminRows = await db.select({ id: users.id, role: users.role, status: users.status }).from(users);
+  const grantIds = new Set<string>([actor.id]);
+  for (const row of adminRows) {
+    if (row.status === "active" && parseRole(row.role) === "master") {
+      grantIds.add(row.id);
+    }
+  }
+  await db.insert(userCompanies).values(
+    [...grantIds].map((userId) => ({
+      userId,
+      companyId: companyItem.id,
+    })),
+  );
   return companyItem;
 }
 
@@ -884,10 +924,6 @@ export async function updateCategoryRecord(id: string, patch: Partial<Category>)
     updates.isActive = patch.is_active;
   }
   await getDb().update(categories).set(updates).where(eq(categories.id, id));
-}
-
-export async function findUserRow(id: string): Promise<User | undefined> {
-  return (await loadUser(id)) ?? undefined;
 }
 
 export async function findCompanyRow(id: string): Promise<Company | undefined> {
