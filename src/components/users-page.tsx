@@ -205,18 +205,22 @@ export function UsersPage({
     null,
   );
   const [revoking, setRevoking] = useState(false);
+  const [listFilter, setListFilter] = useState<"active" | "inactive">("active");
 
   const pendingInvites = useMemo(
     () => invitations.filter((item) => !item.accepted),
     [invitations],
   );
 
+  const activeUsers = useMemo(() => users.filter((item) => item.status === "active"), [users]);
+  const inactiveUsers = useMemo(() => users.filter((item) => item.status === "inactive"), [users]);
+
   const filtered = useMemo(
     () =>
-      users.filter((item) =>
+      (listFilter === "active" ? activeUsers : inactiveUsers).filter((item) =>
         `${item.name} ${item.email} ${item.role}`.toLowerCase().includes(query.toLowerCase()),
       ),
-    [query, users],
+    [activeUsers, inactiveUsers, listFilter, query],
   );
 
   function closeModal() {
@@ -325,6 +329,7 @@ export function UsersPage({
     try {
       if (confirmRevoke.kind === "user") {
         await onRevoke(confirmRevoke.id);
+        setListFilter("active");
       } else {
         await onCancelInvite(confirmRevoke.id);
       }
@@ -349,8 +354,8 @@ export function UsersPage({
           <span className="eyebrow">ACESSO E SEGURANÇA</span>
           <h2>Gestão de usuários</h2>
           <p>
-            Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Depois você pode
-            editar esses acessos a qualquer momento.
+            Crie o usuário pelo e-mail, defina o perfil e as empresas. Excluir acesso tira a pessoa
+            da lista ativa; ela não entra mais no ROM Flow.
           </p>
         </div>
         <button
@@ -398,6 +403,22 @@ export function UsersPage({
               placeholder="Buscar usuário"
             />
           </div>
+          <div className="user-list-tabs">
+            <button
+              type="button"
+              className={cls(listFilter === "active" && "active")}
+              onClick={() => setListFilter("active")}
+            >
+              Ativos {activeUsers.length}
+            </button>
+            <button
+              type="button"
+              className={cls(listFilter === "inactive" && "active")}
+              onClick={() => setListFilter("inactive")}
+            >
+              Inativos {inactiveUsers.length}
+            </button>
+          </div>
         </div>
         <div className="expense-table-wrap">
           <table className="expense-table">
@@ -412,7 +433,23 @@ export function UsersPage({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => (
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty-state">
+                      <strong>
+                        {listFilter === "active" ? "Nenhum acesso ativo nesta busca" : "Nenhum acesso inativo nesta busca"}
+                      </strong>
+                      <span>
+                        {listFilter === "active"
+                          ? "Quem teve o acesso excluído fica em Inativos e não entra no sistema."
+                          : "Restaure um acesso se a pessoa precisar entrar de novo."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <strong>{item.name}</strong>
@@ -434,34 +471,38 @@ export function UsersPage({
                   <td>{formatDate(item.created)}</td>
                   <td>
                     <div className="user-row-actions">
+                      {item.status === "active" ? (
+                        <button
+                          className="danger-text-button"
+                          type="button"
+                          disabled={item.id === currentUserId}
+                          onClick={() =>
+                            setConfirmRevoke({
+                              kind: "user",
+                              id: item.id,
+                              label: item.name,
+                            })
+                          }
+                        >
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                      ) : (
+                        <button
+                          className="switch-button"
+                          disabled={item.id === currentUserId}
+                          onClick={() => onToggle(item.id)}
+                        >
+                          <i /> Restaurar
+                        </button>
+                      )}
                       <button className="secondary-button" type="button" onClick={() => startUserEdit(item)}>
                         <Pencil size={14} /> Editar
-                      </button>
-                      <button
-                        className={cls("switch-button", item.status === "active" && "on")}
-                        disabled={item.id === currentUserId}
-                        onClick={() => onToggle(item.id)}
-                      >
-                        <i /> {item.status === "active" ? "Ativo" : "Inativo"}
-                      </button>
-                      <button
-                        className="danger-text-button"
-                        type="button"
-                        disabled={item.id === currentUserId}
-                        onClick={() =>
-                          setConfirmRevoke({
-                            kind: "user",
-                            id: item.id,
-                            label: item.name,
-                          })
-                        }
-                      >
-                        <Trash2 size={14} /> Excluir acesso
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -679,7 +720,7 @@ export function UsersPage({
                 <h3>Excluir acesso</h3>
                 <p className="modal-lead">
                   {confirmRevoke.kind === "user"
-                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. O histórico de solicitações permanece.`
+                    ? `${confirmRevoke.label} sai da lista de acessos ativos e não entra mais no ROM Flow. O histórico de solicitações permanece.`
                     : `O convite de ${confirmRevoke.label} será cancelado.`}
                 </p>
               </div>
