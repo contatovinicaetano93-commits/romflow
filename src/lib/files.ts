@@ -5,6 +5,9 @@ const MAX_DATA_URL_CHARS = 1_400_000;
 const MAX_IMAGE_EDGE = 1600;
 
 export function fileHref(file: StoredFile): string {
+  if (file.pathname) {
+    return `/api/files?pathname=${encodeURIComponent(file.pathname)}`;
+  }
   return file.url || file.dataUrl || "";
 }
 
