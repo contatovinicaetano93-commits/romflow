@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { canAccessCompany } from "./access";
 import type {
   Category,
   Company,
@@ -50,22 +51,34 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     method === "GET"
       ? `${path}${path.includes("?") ? "&" : "?"}_ts=${Date.now()}`
       : path;
-  const res = await fetch(url, {
-    ...init,
-    method,
-    cache: "no-store",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      ...(init?.headers ?? {}),
-    },
-  });
-  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) {
-    throw new Error(body.error || "Não foi possível concluir a operação.");
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(url, {
+      ...init,
+      method,
+      cache: "no-store",
+      credentials: "include",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        ...(init?.headers ?? {}),
+      },
+    });
+    const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) {
+      throw new Error(body.error || "Não foi possível concluir a operação.");
+    }
+    return body;
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === "AbortError") {
+      throw new Error("A conexão demorou demais. Verifique a internet e tente de novo.");
+    }
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  return body;
 }
 
 type StoreValue = {
@@ -138,7 +151,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const reload = useCallback(async () => {
-    const session = await api<{ user: User | null; needsSetup: boolean }>("/api/auth/session");
+    const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
+      "/api/auth/session",
+    );
     setNeedsSetup(session.needsSetup);
     setUser(session.user);
     syncSentryUser(session.user);
@@ -147,8 +162,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDb(EMPTY_DB);
       return;
     }
-    if (company && !session.user.companyIds.includes(company.id)) {
+    if (company && !canAccessCompany(session.user, company.id)) {
       setCompany(null);
+    }
+    if (session.snapshot) {
+      setDb(session.snapshot);
+      return;
     }
     await refreshData(session.user);
   }, [company, refreshData]);
@@ -157,14 +176,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     async function boot() {
       try {
-        const session = await api<{ user: User | null; needsSetup: boolean }>("/api/auth/session");
+        const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
+          "/api/auth/session",
+        );
         if (cancelled) {
           return;
         }
         setNeedsSetup(session.needsSetup);
         setUser(session.user);
         syncSentryUser(session.user);
-        if (session.user) {
+        if (session.snapshot) {
+          setDb(session.snapshot);
+        } else if (session.user) {
           const snapshot = await api<Database>("/api/data");
           if (!cancelled) {
             setDb(snapshot);
@@ -187,7 +210,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const result = await api<{ user: User }>("/api/auth/login", {
+    const result = await api<{ user: User; snapshot?: Database }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
@@ -195,12 +218,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
-    await refreshData(result.user);
+    if (result.snapshot) {
+      setDb(result.snapshot);
+    } else {
+      await refreshData(result.user);
+    }
     return result.user;
   }, [refreshData]);
 
   const bootstrapAdmin = useCallback(async (name: string, email: string, password: string) => {
-    const result = await api<{ user: User }>("/api/bootstrap", {
+    const result = await api<{ user: User; snapshot?: Database }>("/api/bootstrap", {
       method: "POST",
       body: JSON.stringify({ name, email, password }),
     });
@@ -208,7 +235,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
-    await refreshData(result.user);
+    if (result.snapshot) {
+      setDb(result.snapshot);
+    } else {
+      await refreshData(result.user);
+    }
     return result.user;
   }, [refreshData]);
 
@@ -222,7 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const selectCompany = useCallback(
     (id: string) => {
-      if (!user?.companyIds.includes(id)) {
+      if (!user || !canAccessCompany(user, id)) {
         return;
       }
       setCompany(db.companies.find((item) => item.id === id) ?? null);
@@ -238,7 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return [];
     }
-    return db.companies.filter((item) => item.is_active && user.companyIds.includes(item.id));
+    return db.companies.filter((item) => item.is_active && canAccessCompany(user, item.id));
   }, [db.companies, user]);
 
   const companyExpenses = useCallback(
@@ -365,7 +396,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setUser(result.user);
         syncSentryUser(result.user);
         setCompany((current) =>
-          current && result.user.companyIds.includes(current.id) ? current : null,
+          current && canAccessCompany(result.user, current.id) ? current : null,
         );
       }
       await refreshData(user?.id === userId ? result.user : undefined);

@@ -1,6 +1,6 @@
-import { bootstrapAdmin } from "@/lib/server/data";
-import { ensureSeeded } from "@/lib/server/session";
+import { bootstrapAdmin, getSnapshot } from "@/lib/server/data";
 import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { ensureSeeded } from "@/lib/server/session";
 
 export async function POST(request: Request) {
   try {
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       return jsonError("Preencha nome, e-mail e senha.");
     }
     const user = await bootstrapAdmin(body.name, body.email, body.password);
-    return jsonOk({ user });
+    return jsonOk({ user, snapshot: await getSnapshot(user) });
   } catch (caught) {
     return jsonError(publicError(caught), 400);
   }

@@ -212,7 +212,7 @@ export async function listNotificationRecipients(
     }
     const isRequester = user.id === requesterId;
     const watches =
-      user.companyIds.includes(companyId) &&
+      canAccessCompany(user, companyId) &&
       (isMaster(user.role) || (canAccessArea(user, area) && user.role !== "solicitante"));
     if (!isRequester && !watches) {
       continue;

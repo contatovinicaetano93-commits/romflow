@@ -1,7 +1,7 @@
 import { compare, hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { PERSONAL_BUSINESS_IDS, SEED } from "@/lib/seed";
 import type { User, UserStatus } from "@/lib/types";
 import { getDb } from "@/lib/db";
@@ -39,6 +39,14 @@ export async function verifyPassword(password: string, passwordHash: string): Pr
   return compare(password, passwordHash);
 }
 
+async function sessionCookieSecure(): Promise<boolean> {
+  const forwarded = (await headers()).get("x-forwarded-proto");
+  if (forwarded) {
+    return forwarded.split(",")[0]?.trim().toLowerCase() === "https";
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 export async function createSession(userId: string): Promise<void> {
   const token = await new SignJWT({ sub: userId } satisfies SessionPayload)
     .setProtectedHeader({ alg: "HS256" })
@@ -49,7 +57,7 @@ export async function createSession(userId: string): Promise<void> {
   jar.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await sessionCookieSecure(),
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
@@ -135,9 +143,12 @@ export async function userCount(): Promise<number> {
 
 async function ensureSeedCompanies(): Promise<void> {
   const db = getDb();
-  const existing = await db.select({ id: companies.id }).from(companies);
-  const present = new Set(existing.map((row) => row.id));
-  const missing = SEED.companies.filter((item) => !present.has(item.id));
+  const existing = await db.select({ id: companies.id, slug: companies.slug }).from(companies);
+  const presentIds = new Set(existing.map((row) => row.id));
+  const presentSlugs = new Set(existing.map((row) => row.slug));
+  const missing = SEED.companies.filter(
+    (item) => !presentIds.has(item.id) && !presentSlugs.has(item.slug),
+  );
   if (missing.length === 0) {
     return;
   }
@@ -156,6 +167,8 @@ async function ensureSeedCompanies(): Promise<void> {
 
 async function grantPersonalBusinessesToFinance(): Promise<void> {
   const db = getDb();
+  const companyRows = await db.select({ id: companies.id }).from(companies);
+  const existingIds = new Set(companyRows.map((row) => row.id));
   const userRows = await db.select({ id: users.id, role: users.role }).from(users);
   if (userRows.length === 0) {
     return;
@@ -174,12 +187,53 @@ async function grantPersonalBusinessesToFinance(): Promise<void> {
       continue;
     }
     for (const companyId of PERSONAL_BUSINESS_IDS) {
+      if (!existingIds.has(companyId)) {
+        continue;
+      }
       const key = `${row.id}:${companyId}`;
       if (owned.has(key)) {
         continue;
       }
       owned.add(key);
       next.push({ userId: row.id, companyId });
+    }
+  }
+  if (next.length === 0) {
+    return;
+  }
+  await db.insert(userCompanies).values(next);
+}
+
+async function grantAllCompaniesToMasters(): Promise<void> {
+  const db = getDb();
+  const companyRows = await db.select({ id: companies.id }).from(companies);
+  if (companyRows.length === 0) {
+    return;
+  }
+  const userRows = await db.select({ id: users.id, role: users.role }).from(users);
+  if (userRows.length === 0) {
+    return;
+  }
+  const links = await db.select().from(userCompanies);
+  const owned = new Set(links.map((item) => `${item.userId}:${item.companyId}`));
+  const next: Array<{ userId: string; companyId: string }> = [];
+  for (const row of userRows) {
+    let role: ReturnType<typeof parseRole>;
+    try {
+      role = parseRole(row.role);
+    } catch {
+      continue;
+    }
+    if (role !== "master") {
+      continue;
+    }
+    for (const company of companyRows) {
+      const key = `${row.id}:${company.id}`;
+      if (owned.has(key)) {
+        continue;
+      }
+      owned.add(key);
+      next.push({ userId: row.id, companyId: company.id });
     }
   }
   if (next.length === 0) {
@@ -221,6 +275,7 @@ export async function ensureSeeded(): Promise<void> {
   }
 
   await grantPersonalBusinessesToFinance();
+  await grantAllCompaniesToMasters();
 
   if ((await userCount()) > 0) {
     return;
