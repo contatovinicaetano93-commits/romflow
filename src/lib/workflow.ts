@@ -1,3 +1,4 @@
+import { canAccessCompany } from "@/lib/access";
 import type {
   Expense,
   ExpenseStatus,
@@ -167,7 +168,7 @@ export function canAccessArea(user: User, area: RequestArea): boolean {
 }
 
 export function canSeeExpense(user: User, expense: Expense): boolean {
-  if (!user.companyIds.includes(expense.company)) {
+  if (!canAccessCompany(user, expense.company)) {
     return false;
   }
   if (!canAccessArea(user, expense.area)) {
@@ -184,7 +185,7 @@ export function canAdminArea(user: User, area: RequestArea): boolean {
 }
 
 export function canAttachProof(user: User, expense: Expense): boolean {
-  return canAdminArea(user, expense.area) && user.companyIds.includes(expense.company);
+  return canAdminArea(user, expense.area) && canAccessCompany(user, expense.company);
 }
 
 export function initialStatus(area: RequestArea): ExpenseStatus {

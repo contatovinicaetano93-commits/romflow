@@ -1,5 +1,6 @@
-import { ensureSeeded, getCurrentUser, userCount } from "@/lib/server/session";
+import { getSnapshot } from "@/lib/server/data";
 import { jsonOk, publicError } from "@/lib/server/http";
+import { ensureSeeded, getCurrentUser, userCount } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export async function GET() {
       {
         user,
         needsSetup: (await userCount()) === 0,
+        snapshot: user ? await getSnapshot(user) : null,
       },
       200,
       { "Cache-Control": "no-store, max-age=0" },
