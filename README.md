@@ -50,4 +50,19 @@ npm run db:push
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). Acesso inicial: administrador Rodrigo.
+Abra [http://localhost:3000](http://localhost:3000). Se o banco estiver vazio, a tela inicial pede o cadastro do primeiro master. Não existe senha `demo` no seed.
+
+## Checklist para a equipe usar em produção
+
+Confirme na Vercel (Production) antes de convocar o time:
+
+1. `APP_URL=https://romflow.com.br`
+2. `SESSION_SECRET` com pelo menos 16 caracteres
+3. `DATABASE_URL` (Neon)
+4. `RESEND_API_KEY` e `RESEND_FROM=ROM Flow <noreply@romconcept.com.br>`
+5. Store Blob `ROMFLOWBLOB` conectado ao projeto (`ROMFLOWBLOB_STORE_ID`)
+6. Domínio `romflow.com.br` com HTTPS válido
+
+Primeiro acesso: um master já cadastrado convida o restante em **Usuários**. Convites inativos/desativados devem ser reativados na lista, não reconvidados pelo mesmo e-mail.
+
+Ainda fora deste recorte (próximas melhorias): recuperação de senha, rate limit compartilhado (Redis), valor monetário em `numeric` em vez de `doublePrecision`, desativar empresa via API, 2FA e sessão revogável antes de 30 dias.

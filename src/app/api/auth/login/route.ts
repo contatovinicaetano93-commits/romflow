@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const user = await loginWithPassword(body.email, body.password);
     return jsonOk({ user, snapshot: await getSnapshot(user) });
   } catch (caught) {
-    const message = publicError(caught, "Failed to authenticate.");
+    const message = publicError(caught, "E-mail ou senha incorretos.");
     const status = message.startsWith("Muitas tentativas") ? 429 : 401;
     return jsonError(message, status);
   }

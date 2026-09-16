@@ -56,12 +56,18 @@ function eventCopy(action: "created" | FinanceAction): { subject: string; headli
   }
 }
 
+export type NotifyResult = {
+  emailed: number;
+  failed: number;
+  error?: string;
+};
+
 export async function notifyExpenseChange(input: {
   expense: Expense;
   companyName: string;
   actor: User;
   action: "created" | FinanceAction;
-}): Promise<void> {
+}): Promise<NotifyResult> {
   const copy = eventCopy(input.action);
   const recipients = await listNotificationRecipients(
     input.expense.company,
@@ -76,7 +82,7 @@ export async function notifyExpenseChange(input: {
   const amount = escapeHtml(money(input.expense.amount));
   const status = escapeHtml(STATUS_LABEL[input.expense.status]);
   const safeNote = note ? escapeHtml(note) : "";
-  await Promise.all(
+  const results = await Promise.all(
     recipients.map((recipient) => {
       const roleLabel = ROLE_LABEL[recipient.role];
       const greeting = `Olá, ${recipient.name}. Você recebe este e-mail como ${roleLabel}.`;
@@ -120,4 +126,8 @@ export async function notifyExpenseChange(input: {
       });
     }),
   );
+  const emailed = results.filter((item) => item.sent).length;
+  const failed = results.length - emailed;
+  const error = results.find((item) => !item.sent)?.error;
+  return { emailed, failed, error: failed > 0 ? error : undefined };
 }

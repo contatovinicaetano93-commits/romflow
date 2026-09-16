@@ -308,6 +308,14 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
 
   return (
     <>
+      {store.notice ? (
+        <div className="app-notice" role="status">
+          <span>{store.notice}</span>
+          <button type="button" onClick={store.clearNotice}>
+            Fechar
+          </button>
+        </div>
+      ) : null}
       <AppShell
         role={store.user.role}
         company={store.company}

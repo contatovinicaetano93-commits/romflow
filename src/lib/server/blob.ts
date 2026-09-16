@@ -1,5 +1,6 @@
 import { get, put } from "@vercel/blob";
 import { uid } from "@/lib/db/ids";
+import { blobRequired } from "@/lib/server/config";
 import type { StoredFile } from "@/lib/types";
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -23,6 +24,15 @@ function blobToken(): string | undefined {
 
 function blobEnabled(): boolean {
   return Boolean(blobStoreId() || blobToken());
+}
+
+function assertBlobReady(): void {
+  if (blobEnabled()) {
+    return;
+  }
+  if (blobRequired()) {
+    throw new Error("Armazenamento de arquivos não configurado. Conecte o Blob ROMFLOWBLOB na Vercel.");
+  }
 }
 
 export function blobCallOptions(): BlobCallOptions {
@@ -226,6 +236,7 @@ export async function persistStoredFile(
     throw new Error("Arquivo inválido.");
   }
   const contentType = storedContentType(file.type);
+  assertBlobReady();
   if (!blobEnabled()) {
     if (file.dataUrl.length > MAX_DATA_URL_CHARS) {
       throw new Error("Este arquivo está grande demais. Envie um PDF menor ou uma foto.");
@@ -248,6 +259,7 @@ export async function persistUploadFile(file: File, folder: string): Promise<Sto
     throw new Error("O arquivo deve ter no máximo 10 MB.");
   }
   const contentType = storedContentType(file.type);
+  assertBlobReady();
   if (!blobEnabled()) {
     const buf = Buffer.from(await file.arrayBuffer());
     const dataUrl = `data:${contentType};base64,${buf.toString("base64")}`;

@@ -39,7 +39,7 @@ export function LoginPage({
         await onLogin(email, password);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to authenticate.");
+      setError(caught instanceof Error ? caught.message : "Não foi possível entrar. Tente de novo.");
     } finally {
       setLoading(false);
     }
@@ -184,7 +184,7 @@ export function LoginPage({
           {needsSetup ? null : (
             <div className="login-help">
               <span>Problemas para acessar?</span>
-              <button type="button">Fale com o administrador</button>
+              <a href="mailto:adm@romconcept.com.br?subject=Acesso%20ROM%20Flow">Fale com o administrador</a>
             </div>
           )}
         </form>

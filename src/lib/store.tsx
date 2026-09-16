@@ -52,7 +52,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ? `${path}${path.includes("?") ? "&" : "?"}_ts=${Date.now()}`
       : path;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 20_000);
+  const timeoutMs = method === "GET" ? 20_000 : 45_000;
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       ...init,
@@ -129,6 +130,8 @@ type StoreValue = {
   updateCategory: (id: string, patch: Partial<Category>) => Promise<void>;
   findUser: (id: string) => User | undefined;
   findCompany: (id: string) => Company | undefined;
+  notice: string | null;
+  clearNotice: () => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -139,6 +142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Database>(EMPTY_DB);
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const refreshData = useCallback(async (nextUser?: User | null) => {
     const active = nextUser === undefined ? user : nextUser;
@@ -287,10 +291,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const createExpense = useCallback(
     async (input: Omit<Expense, "id" | "created" | "updated">) => {
-      const result = await api<{ expense: Expense }>("/api/expenses", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
+      const result = await api<{ expense: Expense; emailSent?: boolean; emailError?: string }>(
+        "/api/expenses",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      if (result.emailError) {
+        setNotice(`Solicitação salva, mas o e-mail não saiu: ${result.emailError}`);
+      } else {
+        setNotice(null);
+      }
       await refreshData();
       return result.expense;
     },
@@ -299,10 +311,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const applyFinanceAction = useCallback(
     async (expenseId: string, action: FinanceAction, payload?: FinanceActionPayload) => {
-      const result = await api<{ expense: Expense }>("/api/expenses/action", {
-        method: "POST",
-        body: JSON.stringify({ expenseId, action, payload }),
-      });
+      const result = await api<{ expense: Expense; emailSent?: boolean; emailError?: string }>(
+        "/api/expenses/action",
+        {
+          method: "POST",
+          body: JSON.stringify({ expenseId, action, payload }),
+        },
+      );
+      if (result.emailError) {
+        setNotice(`Movimentação salva, mas o e-mail não saiu: ${result.emailError}`);
+      } else {
+        setNotice(null);
+      }
       setDb((current) => ({
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
@@ -458,6 +478,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => db.companies.find((item) => item.id === id),
     [db.companies],
   );
+  const clearNotice = useCallback(() => {
+    setNotice(null);
+  }, []);
 
   const value = useMemo<StoreValue>(
     () => ({
@@ -489,6 +512,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateCategory,
       findUser,
       findCompany,
+      notice,
+      clearNotice,
     }),
     [
       acceptInvite,
@@ -496,6 +521,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyFinanceAction,
       bootstrapAdmin,
       cancelInvitation,
+      clearNotice,
       company,
       companyExpenses,
       createCategory,
@@ -508,6 +534,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       needsSetup,
+      notice,
       ready,
       selectCompany,
       switchCompany,

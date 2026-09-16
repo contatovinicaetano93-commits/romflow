@@ -361,14 +361,14 @@ export async function loginWithPassword(email: string, password: string): Promis
     .where(eq(users.email, email.trim().toLowerCase()))
     .limit(1);
   if (!row || !(await verifyPassword(password, row.passwordHash))) {
-    throw new Error("Failed to authenticate.");
+    throw new Error("E-mail ou senha incorretos.");
   }
   if (row.status !== "active") {
     throw new Error("Este acesso está desativado. Fale com o administrador.");
   }
   const user = await loadUser(row.id);
   if (!user) {
-    throw new Error("Failed to authenticate.");
+    throw new Error("E-mail ou senha incorretos.");
   }
   await createSession(user.id);
   return user;
@@ -588,8 +588,17 @@ export async function createInvitationRecord(
   const resolvedCompanies = await resolveCompanyIds(companyIds);
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
-  const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, normalized)).limit(1);
+  const [existingUser] = await db
+    .select({ id: users.id, status: users.status })
+    .from(users)
+    .where(eq(users.email, normalized))
+    .limit(1);
   if (existingUser) {
+    if (existingUser.status !== "active") {
+      throw new Error(
+        "Este e-mail já tem um acesso desativado. Reative o usuário na lista em vez de criar um convite.",
+      );
+    }
     throw new Error("Já existe um usuário com este e-mail.");
   }
   const [existingInvite] = await db
@@ -631,6 +640,7 @@ export async function createInvitationRecord(
     );
   }
   await replaceInvitationAreas(invitation.id, resolvedAreas);
+  await writeAudit(actor.id, "CREATE_INVITE", invitation.id, "—", invitation.email);
   return invitation;
 }
 
@@ -807,10 +817,18 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   if (!row) {
     throw new Error("Usuário não encontrado.");
   }
-  await db
-    .update(users)
-    .set({ status: row.status === "active" ? "inactive" : "active" })
-    .where(eq(users.id, userId));
+  const nextStatus = row.status === "active" ? "inactive" : "active";
+  if (nextStatus === "inactive" && parseRole(row.role) === "master") {
+    const adminRows = await db.select({ id: users.id, role: users.role, status: users.status }).from(users);
+    const otherMasters = adminRows.filter(
+      (item) => item.id !== userId && item.status === "active" && parseRole(item.role) === "master",
+    );
+    if (otherMasters.length === 0) {
+      throw new Error("É preciso manter ao menos um master ativo.");
+    }
+  }
+  await db.update(users).set({ status: nextStatus }).where(eq(users.id, userId));
+  await writeAudit(actor.id, "TOGGLE_USER", userId, row.status, nextStatus);
 }
 
 export async function revokeUserAccessRecord(actor: User, userId: string): Promise<void> {

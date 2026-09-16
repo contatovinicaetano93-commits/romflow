@@ -1,6 +1,6 @@
 import type { Database } from "./types";
 
-export const SEED_REVISION = 7;
+export const SEED_REVISION = 8;
 
 export const PERSONAL_BUSINESS_IDS = ["cmp_romeu_felipe", "cmp_henrique_rocha"] as const;
 
@@ -78,27 +78,7 @@ export const SEED: Database = {
     { id: "cat_soft", name: "Software", color: "#10B981", is_active: true },
     { id: "cat_outros", name: "Outros", color: "#71717A", is_active: true },
   ],
-  users: [
-    {
-      id: "usr_adm",
-      name: "Rodrigo",
-      email: "adm@romconcept.com.br",
-      password: "demo",
-      role: "master",
-      areaIds: ["financeiro", "manutencao", "compras", "rh"],
-      status: "active",
-      companyIds: [
-        "cmp_baru_brasil",
-        "cmp_baru_iguatemi",
-        "cmp_academy",
-        "cmp_concept_brasil",
-        "cmp_concept_iguatemi",
-        "cmp_romeu_felipe",
-        "cmp_henrique_rocha",
-      ],
-      created: "2026-01-10T12:00:00.000Z",
-    },
-  ],
+  users: [],
   invitations: [],
   expenses: [],
   auditLogs: [],
