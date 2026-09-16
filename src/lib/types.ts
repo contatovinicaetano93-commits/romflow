@@ -130,6 +130,7 @@ export type StoredFile = {
   name: string;
   size: number;
   type: string;
+  pathname?: string;
   url?: string;
   dataUrl?: string;
 };

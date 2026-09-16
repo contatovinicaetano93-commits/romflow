@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { canAccessCompany } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { uid, inviteToken } from "@/lib/db/ids";
@@ -48,7 +48,7 @@ import {
   validatePaymentDate,
   withEventDateObservation,
 } from "@/lib/workflow";
-import { persistStoredFile, publicStoredFile } from "@/lib/server/blob";
+import { fileProxyUrl, persistStoredFile, publicStoredFile } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
 import { assertPassword, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
@@ -929,4 +929,27 @@ export async function updateCategoryRecord(id: string, patch: Partial<Category>)
 export async function findCompanyRow(id: string): Promise<Company | undefined> {
   const [row] = await getDb().select().from(companies).where(eq(companies.id, id)).limit(1);
   return row ? mapCompany(row) : undefined;
+}
+
+export async function userCanReadStoredPath(user: User, pathname: string): Promise<boolean> {
+  if (pathname.startsWith(`romflow/${user.id}/`)) {
+    return true;
+  }
+  const proxyUrl = fileProxyUrl(pathname);
+  const urlSuffix = `%/${pathname}`;
+  const [row] = await getDb()
+    .select()
+    .from(expenses)
+    .where(
+      or(
+        sql`coalesce(${expenses.receipt} ->> 'pathname', '') = ${pathname}`,
+        sql`coalesce(${expenses.paymentProof} ->> 'pathname', '') = ${pathname}`,
+        sql`coalesce(${expenses.receipt} ->> 'url', '') = ${proxyUrl}`,
+        sql`coalesce(${expenses.paymentProof} ->> 'url', '') = ${proxyUrl}`,
+        sql`coalesce(${expenses.receipt} ->> 'url', '') like ${urlSuffix}`,
+        sql`coalesce(${expenses.paymentProof} ->> 'url', '') like ${urlSuffix}`,
+      ),
+    )
+    .limit(1);
+  return row ? canSeeExpense(user, mapExpense(row)) : false;
 }
