@@ -239,7 +239,7 @@ async function grantAllCompaniesToMasters(): Promise<void> {
   if (next.length === 0) {
     return;
   }
-  await db.insert(userCompanies).values(next);
+  await db.insert(userCompanies).values(next).onConflictDoNothing();
 }
 
 export async function ensureSeeded(): Promise<void> {

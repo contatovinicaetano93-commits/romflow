@@ -12,7 +12,12 @@ export async function POST(request: Request) {
     }
     assertRateLimit(clientKey(request, `login:${body.email}`));
     const user = await loginWithPassword(body.email, body.password);
-    return jsonOk({ user, snapshot: await getSnapshot(user) });
+    try {
+      return jsonOk({ user, snapshot: await getSnapshot(user) });
+    } catch {
+      // Session is already issued; the client can load the snapshot separately.
+      return jsonOk({ user });
+    }
   } catch (caught) {
     const message = publicError(caught, "Failed to authenticate.");
     const status = message.startsWith("Muitas tentativas") ? 429 : 401;

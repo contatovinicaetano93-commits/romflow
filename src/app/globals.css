@@ -502,7 +502,8 @@ body {
   .login-form-wrap {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    align-content: center;
+    align-content: start;
+    align-content: safe center;
   }
 }
 

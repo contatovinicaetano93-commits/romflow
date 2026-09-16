@@ -10,7 +10,12 @@ export async function POST(request: Request) {
       return jsonError("Preencha nome, e-mail e senha.");
     }
     const user = await bootstrapAdmin(body.name, body.email, body.password);
-    return jsonOk({ user, snapshot: await getSnapshot(user) });
+    try {
+      return jsonOk({ user, snapshot: await getSnapshot(user) });
+    } catch {
+      // The master user and session are already created; retrying bootstrap would fail.
+      return jsonOk({ user });
+    }
   } catch (caught) {
     return jsonError(publicError(caught), 400);
   }

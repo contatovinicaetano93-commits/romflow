@@ -51,34 +51,22 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     method === "GET"
       ? `${path}${path.includes("?") ? "&" : "?"}_ts=${Date.now()}`
       : path;
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 20_000);
-  try {
-    const res = await fetch(url, {
-      ...init,
-      method,
-      cache: "no-store",
-      credentials: "include",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-        ...(init?.headers ?? {}),
-      },
-    });
-    const body = (await res.json().catch(() => ({}))) as T & { error?: string };
-    if (!res.ok) {
-      throw new Error(body.error || "Não foi possível concluir a operação.");
-    }
-    return body;
-  } catch (caught) {
-    if (caught instanceof DOMException && caught.name === "AbortError") {
-      throw new Error("A conexão demorou demais. Verifique a internet e tente de novo.");
-    }
-    throw caught;
-  } finally {
-    window.clearTimeout(timeout);
+  const res = await fetch(url, {
+    ...init,
+    method,
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      ...(init?.headers ?? {}),
+    },
+  });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error || "Não foi possível concluir a operação.");
   }
+  return body;
 }
 
 type StoreValue = {
