@@ -10,6 +10,16 @@ export async function readJson<T>(request: Request): Promise<T> {
   return (await request.json()) as T;
 }
 
+const SENSITIVE_ERROR =
+  /SESSION_SECRET|DATABASE_URL|passwordHash|ECONNREFUSED|neon\.tech|postgres:\/\/|mongodb:\/\/|redis:\/\//i;
+
 export function publicError(caught: unknown, fallback = "Não foi possível concluir a operação."): string {
-  return caught instanceof Error ? caught.message : fallback;
+  if (!(caught instanceof Error)) {
+    return fallback;
+  }
+  const message = caught.message.trim();
+  if (!message || SENSITIVE_ERROR.test(message)) {
+    return fallback;
+  }
+  return message;
 }

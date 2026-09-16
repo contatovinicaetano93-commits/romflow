@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { createExpenseRecord, findCompanyRow } from "@/lib/server/data";
 import { notifyExpenseChange } from "@/lib/server/notify";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
@@ -13,17 +12,23 @@ export async function POST(request: Request) {
     const expense = await createExpenseRecord(user, input);
     const company = await findCompanyRow(expense.company);
     const companyName = company?.name ?? expense.company;
-    after(() =>
-      notifyExpenseChange({
+    let emailError: string | undefined;
+    try {
+      const mail = await notifyExpenseChange({
         expense,
         companyName,
         actor: user,
         action: "created",
-      }).catch(() => {
-        // The request already created the expense; email log records delivery failures.
-      }),
-    );
-    return jsonOk({ expense });
+      });
+      emailError = mail.error;
+    } catch (caught) {
+      emailError = publicError(caught, "Não foi possível enviar o e-mail.");
+    }
+    return jsonOk({
+      expense,
+      emailSent: !emailError,
+      emailError,
+    });
   } catch (caught) {
     const message = publicError(caught);
     return jsonError(message, message === "Sessão expirada." ? 401 : 400);

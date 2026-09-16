@@ -54,7 +54,13 @@ export function CompanySelect({
           fluxo. Perfil {ROLE_LABEL[user.role]}.
         </p>
         {companies.length === 0 ? (
-          <p>Nenhuma empresa ativa disponível.</p>
+          <div className="empty-state">
+            <strong>Nenhuma empresa disponível</strong>
+            <span>
+              Peça a um master para atribuir empresas ao seu acesso. Se você é master, recarregue a
+              página ou cadastre uma empresa em Configurações.
+            </span>
+          </div>
         ) : (
           <div className="company-grid">
             {companies.map((company, index) => {

@@ -176,7 +176,7 @@ export function UsersPage({
     companyIds: string[],
     areaIds: RequestArea[],
   ) => Promise<void>;
-  onToggle: (userId: string) => void;
+  onToggle: (userId: string) => void | Promise<void>;
   onRevoke: (userId: string) => Promise<void>;
   onCancelInvite: (invitationId: string) => Promise<void>;
 }) {
@@ -211,15 +211,14 @@ export function UsersPage({
     [invitations],
   );
 
-  const filtered = useMemo(
-    () =>
-      users.filter(
-        (item) =>
-          item.status === "active" &&
-          `${item.name} ${item.email} ${item.role}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [query, users],
-  );
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return users
+      .filter((item) => `${item.name} ${item.email} ${ROLE_LABEL[item.role]} ${item.status}`.toLowerCase().includes(q))
+      .sort(
+        (a, b) => Number(b.status === "active") - Number(a.status === "active") || a.name.localeCompare(b.name, "pt-BR"),
+      );
+  }, [query, users]);
 
   function closeModal() {
     setOpen(false);
@@ -442,7 +441,19 @@ export function UsersPage({
                       <button
                         className={cls("switch-button", item.status === "active" && "on")}
                         disabled={item.id === currentUserId}
-                        onClick={() => onToggle(item.id)}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              await onToggle(item.id);
+                            } catch (caught) {
+                              setError(
+                                caught instanceof Error
+                                  ? caught.message
+                                  : "Não foi possível alterar o status do usuário.",
+                              );
+                            }
+                          })();
+                        }}
                       >
                         <i /> {item.status === "active" ? "Ativo" : "Inativo"}
                       </button>
@@ -486,7 +497,7 @@ export function UsersPage({
                 <span>
                   <strong>{item.email}</strong>
                   <small>
-                    {ROLE_LABEL[item.role]} • Aguardando a pessoa cadastrar a senha
+                    {ROLE_LABEL[item.role]} • Expira em {formatDate(item.expires)}
                   </small>
                   <div className="invitation-companies">
                     <CompanyChips ids={item.companyIds} companies={companies} />

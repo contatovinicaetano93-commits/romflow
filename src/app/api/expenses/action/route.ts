@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import {
   applyFinanceActionRecord,
   findCompanyRow,
@@ -24,18 +23,23 @@ export async function POST(request: Request) {
     const expense = await applyFinanceActionRecord(user, body.expenseId, body.action, body.payload);
     const company = await findCompanyRow(expense.company);
     const companyName = company?.name ?? expense.company;
-    const action = body.action;
-    after(() =>
-      notifyExpenseChange({
+    let emailError: string | undefined;
+    try {
+      const mail = await notifyExpenseChange({
         expense,
         companyName,
         actor: user,
-        action,
-      }).catch(() => {
-        // Status already saved; email log records delivery failures.
-      }),
-    );
-    return jsonOk({ expense });
+        action: body.action,
+      });
+      emailError = mail.error;
+    } catch (caught) {
+      emailError = publicError(caught, "Não foi possível enviar o e-mail.");
+    }
+    return jsonOk({
+      expense,
+      emailSent: !emailError,
+      emailError,
+    });
   } catch (caught) {
     const message = publicError(caught);
     return jsonError(message, message === "Sessão expirada." ? 401 : 400);

@@ -1,13 +1,12 @@
 import { compare, hash } from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies, headers } from "next/headers";
-import { PERSONAL_BUSINESS_IDS, SEED } from "@/lib/seed";
+import { SEED } from "@/lib/seed";
 import type { User, UserStatus } from "@/lib/types";
 import { getDb } from "@/lib/db";
 import { categories, companies, userAreas, userCompanies, users } from "@/lib/db/schema";
 import { defaultAreasForRole, parseAreas, parseRole } from "@/lib/workflow";
-import { sql } from "drizzle-orm";
 
 const COOKIE = "romflow_session";
 
@@ -165,45 +164,6 @@ async function ensureSeedCompanies(): Promise<void> {
   );
 }
 
-async function grantPersonalBusinessesToFinance(): Promise<void> {
-  const db = getDb();
-  const companyRows = await db.select({ id: companies.id }).from(companies);
-  const existingIds = new Set(companyRows.map((row) => row.id));
-  const userRows = await db.select({ id: users.id, role: users.role }).from(users);
-  if (userRows.length === 0) {
-    return;
-  }
-  const links = await db.select().from(userCompanies);
-  const owned = new Set(links.map((item) => `${item.userId}:${item.companyId}`));
-  const next: Array<{ userId: string; companyId: string }> = [];
-  for (const row of userRows) {
-    let role: ReturnType<typeof parseRole>;
-    try {
-      role = parseRole(row.role);
-    } catch {
-      continue;
-    }
-    if (role !== "master" && role !== "admin_financeiro") {
-      continue;
-    }
-    for (const companyId of PERSONAL_BUSINESS_IDS) {
-      if (!existingIds.has(companyId)) {
-        continue;
-      }
-      const key = `${row.id}:${companyId}`;
-      if (owned.has(key)) {
-        continue;
-      }
-      owned.add(key);
-      next.push({ userId: row.id, companyId });
-    }
-  }
-  if (next.length === 0) {
-    return;
-  }
-  await db.insert(userCompanies).values(next);
-}
-
 async function grantAllCompaniesToMasters(): Promise<void> {
   const db = getDb();
   const companyRows = await db.select({ id: companies.id }).from(companies);
@@ -215,6 +175,7 @@ async function grantAllCompaniesToMasters(): Promise<void> {
     return;
   }
   const links = await db.select().from(userCompanies);
+  const linkedUserIds = new Set(links.map((item) => item.userId));
   const owned = new Set(links.map((item) => `${item.userId}:${item.companyId}`));
   const next: Array<{ userId: string; companyId: string }> = [];
   for (const row of userRows) {
@@ -225,6 +186,9 @@ async function grantAllCompaniesToMasters(): Promise<void> {
       continue;
     }
     if (role !== "master") {
+      continue;
+    }
+    if (linkedUserIds.has(row.id)) {
       continue;
     }
     for (const company of companyRows) {
@@ -274,40 +238,6 @@ export async function ensureSeeded(): Promise<void> {
     // Columns may not exist until drizzle push; next request after schema sync will migrate.
   }
 
-  await grantPersonalBusinessesToFinance();
   await grantAllCompaniesToMasters();
-
-  if ((await userCount()) > 0) {
-    return;
-  }
-  const seedUser = SEED.users[0];
-  if (!seedUser?.password) {
-    return;
-  }
-  await db.insert(users).values({
-    id: seedUser.id,
-    name: seedUser.name,
-    email: seedUser.email,
-    passwordHash: await hashPassword(seedUser.password),
-    role: seedUser.role,
-    status: seedUser.status,
-    created: seedUser.created,
-  });
-  if (seedUser.companyIds.length) {
-    await db.insert(userCompanies).values(
-      seedUser.companyIds.map((companyId) => ({
-        userId: seedUser.id,
-        companyId,
-      })),
-    );
-  }
-  if (seedUser.areaIds.length) {
-    await db.insert(userAreas).values(
-      seedUser.areaIds.map((area) => ({
-        userId: seedUser.id,
-        area,
-      })),
-    );
-  }
 }
 

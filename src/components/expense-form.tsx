@@ -618,7 +618,7 @@ export function ExpenseForm({
               <Check size={20} />
               <div>
                 <h3>Revise antes de enviar</h3>
-                <p>Depois do envio, o Financeiro será notificado imediatamente.</p>
+                <p>A solicitação é salva agora. O responsável da área recebe um e-mail em seguida.</p>
               </div>
             </div>
             <div className="review-hero">

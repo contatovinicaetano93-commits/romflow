@@ -3,11 +3,19 @@ import { getDb } from "@/lib/db";
 import { uid } from "@/lib/db/ids";
 import { emailLogs } from "@/lib/db/schema";
 import { ROLE_LABEL } from "@/lib/format";
+import { isVercelProduction } from "@/lib/server/config";
 import type { EmailLogKind, Invitation, Role } from "@/lib/types";
 
 export function appUrl(): string {
-  if (process.env.APP_URL) {
-    return process.env.APP_URL.replace(/\/$/, "");
+  const configured = process.env.APP_URL?.replace(/\/$/, "");
+  if (isVercelProduction()) {
+    if (!configured) {
+      throw new Error("APP_URL não configurada. Defina https://romflow.com.br na Vercel.");
+    }
+    return configured;
+  }
+  if (configured) {
+    return configured;
   }
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
