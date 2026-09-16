@@ -1,4 +1,9 @@
-import { assertSafeBlobPathname, persistUploadFile, streamPrivateBlob } from "@/lib/server/blob";
+import {
+  assertSafeBlobPathname,
+  blobDownloadHeaders,
+  persistUploadFile,
+  streamPrivateBlob,
+} from "@/lib/server/blob";
 import { userCanReadStoredPath } from "@/lib/server/data";
 import { jsonError, jsonOk, publicError } from "@/lib/server/http";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
@@ -23,12 +28,7 @@ export async function GET(request: Request) {
       return jsonError("Arquivo não encontrado.", 404);
     }
     return new Response(result.stream, {
-      headers: {
-        "Content-Type": result.blob.contentType || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${filenameFromPathname(pathname)}"`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+      headers: blobDownloadHeaders(result.blob.contentType, filenameFromPathname(pathname)),
     });
   } catch (caught) {
     const message = publicError(caught);

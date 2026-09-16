@@ -5,6 +5,7 @@ import type { StoredFile } from "@/lib/types";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_DATA_URL_CHARS = 1_400_000;
 const BLOB_PREFIX = "romflow/";
+const INLINE_IMAGE_PREFIX = "image/";
 
 type BlobCallOptions = {
   access: "private";
@@ -107,6 +108,72 @@ export function assertSafeBlobPathname(pathname: string): string {
   return trimmed;
 }
 
+function normalizedContentType(type: string): string {
+  return type.split(";")[0].trim().toLowerCase();
+}
+
+function isSafeInlineContentType(type: string): boolean {
+  if (type === "application/pdf") {
+    return true;
+  }
+  return type.startsWith(INLINE_IMAGE_PREFIX) && type !== "image/svg+xml";
+}
+
+function storedContentType(type: string): string {
+  const normalized = normalizedContentType(type);
+  if (!normalized) {
+    return "application/octet-stream";
+  }
+  if (normalized === "application/octet-stream" || isSafeInlineContentType(normalized)) {
+    return normalized;
+  }
+  throw new Error("Envie um PDF ou uma imagem.");
+}
+
+export function blobDownloadHeaders(contentType: string | undefined, filename: string): HeadersInit {
+  const type = normalizedContentType(contentType || "application/octet-stream") || "application/octet-stream";
+  const inline = isSafeInlineContentType(type);
+  return {
+    "Content-Type": inline ? type : "application/octet-stream",
+    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${filename}"`,
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox",
+  };
+}
+
+export function storedFileGrantsPathname(file: StoredFile | null | undefined, pathname: string): boolean {
+  if (!file) {
+    return false;
+  }
+  if (file.pathname === pathname) {
+    return true;
+  }
+  if (!file.url) {
+    return false;
+  }
+  if (file.url === fileProxyUrl(pathname)) {
+    return true;
+  }
+  return pathnameFromProxyUrl(file.url) === pathname || pathnameFromBlobUrl(file.url) === pathname;
+}
+
+function assertReusableStoredFile(file: StoredFile, actorId: string, existing?: StoredFile | null): void {
+  const claimed = storedPathname(file);
+  if (!claimed) {
+    return;
+  }
+  const safe = assertSafeBlobPathname(claimed);
+  if (safe.startsWith(`${BLOB_PREFIX}${actorId}/`)) {
+    return;
+  }
+  const existingPath = existing ? storedPathname(existing) : null;
+  if (existingPath === safe) {
+    return;
+  }
+  throw new Error("Arquivo inválido.");
+}
+
 function storedFromBlob(file: { name: string; size: number; type: string }, blob: { pathname: string }): StoredFile {
   return {
     name: file.name,
@@ -142,26 +209,32 @@ export function publicStoredFile(file: StoredFile | null): StoredFile | null {
   return file;
 }
 
-export async function persistStoredFile(file: StoredFile | null, folder: string): Promise<StoredFile | null> {
+export async function persistStoredFile(
+  file: StoredFile | null,
+  folder: string,
+  actorId: string,
+  existing?: StoredFile | null,
+): Promise<StoredFile | null> {
   if (!file) {
     return null;
   }
   if (file.pathname || file.url) {
+    assertReusableStoredFile(file, actorId, existing);
     return publicStoredFile(file);
   }
   if (!file.dataUrl) {
     throw new Error("Arquivo inválido.");
   }
+  const contentType = storedContentType(file.type);
   if (!blobEnabled()) {
     if (file.dataUrl.length > MAX_DATA_URL_CHARS) {
       throw new Error("Este arquivo está grande demais. Envie um PDF menor ou uma foto.");
     }
-    return file;
+    return { ...file, type: contentType };
   }
   const comma = file.dataUrl.indexOf(",");
   const base64 = comma >= 0 ? file.dataUrl.slice(comma + 1) : file.dataUrl;
   const body = Buffer.from(base64, "base64");
-  const contentType = file.type || "application/octet-stream";
   const blob = await put(`${BLOB_PREFIX}${folder}/${uid("file")}-${safeName(file.name)}`, body, {
     ...blobCallOptions(),
     addRandomSuffix: true,
@@ -174,20 +247,20 @@ export async function persistUploadFile(file: File, folder: string): Promise<Sto
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error("O arquivo deve ter no máximo 10 MB.");
   }
+  const contentType = storedContentType(file.type);
   if (!blobEnabled()) {
     const buf = Buffer.from(await file.arrayBuffer());
-    const dataUrl = `data:${file.type || "application/octet-stream"};base64,${buf.toString("base64")}`;
+    const dataUrl = `data:${contentType};base64,${buf.toString("base64")}`;
     if (dataUrl.length > MAX_DATA_URL_CHARS) {
       throw new Error("Este arquivo está grande demais. Envie um PDF menor ou uma foto.");
     }
     return {
       name: file.name,
       size: file.size,
-      type: file.type,
+      type: contentType,
       dataUrl,
     };
   }
-  const contentType = file.type || "application/octet-stream";
   const blob = await put(`${BLOB_PREFIX}${folder}/${uid("file")}-${safeName(file.name)}`, file, {
     ...blobCallOptions(),
     addRandomSuffix: true,

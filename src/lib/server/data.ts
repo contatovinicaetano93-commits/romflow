@@ -48,7 +48,7 @@ import {
   validatePaymentDate,
   withEventDateObservation,
 } from "@/lib/workflow";
-import { fileProxyUrl, persistStoredFile, publicStoredFile } from "@/lib/server/blob";
+import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
 import { assertPassword, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
@@ -429,7 +429,7 @@ export async function createExpenseRecord(
     validateEventDate(input.expense_type, input.event_date);
   }
   const created = new Date().toISOString();
-  const receipt = await persistStoredFile(input.receipt, "receipts");
+  const receipt = await persistStoredFile(input.receipt, "receipts", actor.id);
   const expense: Expense = {
     ...input,
     description: withEventDateObservation(input.description, input.expense_type, input.event_date),
@@ -540,8 +540,13 @@ export async function applyFinanceActionRecord(
       throw new Error(`Ação não suportada: ${exhaustive}`);
     }
   }
-  const paymentProof = await persistStoredFile(payload?.proof ?? current.payment_proof, "proofs");
-  const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts");
+  const paymentProof = await persistStoredFile(
+    payload?.proof ?? current.payment_proof,
+    "proofs",
+    actor.id,
+    current.payment_proof,
+  );
+  const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts", actor.id, current.receipt);
   const updated: Expense = {
     ...current,
     status,
@@ -937,7 +942,7 @@ export async function userCanReadStoredPath(user: User, pathname: string): Promi
   }
   const proxyUrl = fileProxyUrl(pathname);
   const urlSuffix = `%/${pathname}`;
-  const [row] = await getDb()
+  const rows = await getDb()
     .select()
     .from(expenses)
     .where(
@@ -949,7 +954,10 @@ export async function userCanReadStoredPath(user: User, pathname: string): Promi
         sql`coalesce(${expenses.receipt} ->> 'url', '') like ${urlSuffix}`,
         sql`coalesce(${expenses.paymentProof} ->> 'url', '') like ${urlSuffix}`,
       ),
-    )
-    .limit(1);
-  return row ? canSeeExpense(user, mapExpense(row)) : false;
+    );
+  return rows.some(
+    (row) =>
+      (storedFileGrantsPathname(row.receipt, pathname) || storedFileGrantsPathname(row.paymentProof, pathname)) &&
+      canSeeExpense(user, mapExpense(row)),
+  );
 }
