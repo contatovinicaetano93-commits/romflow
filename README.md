@@ -28,12 +28,14 @@ O DNS permanece na Locaweb para não quebrar o e-mail. Não altere NS, MX, SPF, 
 
 Na Vercel: projeto **romflow** → Settings → Domains → adicionar `romflow.com.br` e `www.romflow.com.br` (redirecionar `www` para o apex).
 
-Na zona DNS da Locaweb, altere só estas duas entradas:
+Na zona DNS da Locaweb, altere só estas duas entradas (valores do card do projeto na Vercel):
 
 | Entrada | Tipo | De | Para |
 | --- | --- | --- | --- |
-| `.` | A | `191.252.4.62` | `10.0.1.2` |
-| `www` | CNAME | `romflow.com.br` | `cname.vercel-dns-0.com` |
+| `.` | A | `191.252.4.62` | `216.150.1.1` |
+| `www` | CNAME | `romflow.com.br` | `32ec7df72e97c27f.vercel-dns-016.com` |
+
+Se a Locaweb recusar o CNAME como “url válida”, deixe `www` apontando para `romflow.com.br` e mude só o A.
 
 Manter:
 
