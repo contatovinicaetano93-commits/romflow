@@ -1,4 +1,4 @@
-import { requestPasswordReset } from "@/lib/server/data";
+import { finalizePasswordResetIssue, requestPasswordReset } from "@/lib/server/data";
 import { sendPasswordResetEmail } from "@/lib/server/mail";
 import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 import { assertRateLimit, clientKey } from "@/lib/server/rate-limit";
@@ -14,11 +14,14 @@ export async function POST(request: Request) {
     await assertRateLimit(clientKey(request, `forgot:${body.email}`));
     const reset = await requestPasswordReset(body.email);
     if (reset) {
+      let delivered = false;
       try {
-        await sendPasswordResetEmail(reset.email, reset.name, reset.token);
+        const mail = await sendPasswordResetEmail(reset.email, reset.name, reset.token);
+        delivered = mail.sent;
       } catch {
-        // Same response either way so the form does not leak whether the e-mail exists.
+        delivered = false;
       }
+      await finalizePasswordResetIssue({ id: reset.id, userId: reset.userId, delivered });
     }
     return jsonOk({ ok: true });
   } catch (caught) {

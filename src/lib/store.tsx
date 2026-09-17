@@ -227,7 +227,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (result.snapshot) {
       setDb(result.snapshot);
     } else {
-      await refreshData(result.user);
+      try {
+        await refreshData(result.user);
+      } catch {
+        setDb(EMPTY_DB);
+      }
     }
     return result.user;
   }, [refreshData]);
@@ -244,7 +248,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (result.snapshot) {
       setDb(result.snapshot);
     } else {
-      await refreshData(result.user);
+      try {
+        await refreshData(result.user);
+      } catch {
+        setDb(EMPTY_DB);
+      }
     }
     return result.user;
   }, [refreshData]);

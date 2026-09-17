@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { canAccessCompany } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { uid, inviteToken, hashToken } from "@/lib/db/ids";
@@ -987,7 +987,9 @@ export async function updateCompanyStatusRecord(actor: User, companyId: string, 
   return mapCompany({ ...row, isActive });
 }
 
-export async function requestPasswordReset(email: string): Promise<{ token: string; name: string; email: string } | null> {
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ id: string; userId: string; token: string; name: string; email: string } | null> {
   const normalized = email.trim().toLowerCase();
   const db = getDb();
   const [row] = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
@@ -995,20 +997,32 @@ export async function requestPasswordReset(email: string): Promise<{ token: stri
     return null;
   }
   const token = inviteToken();
-  const created = new Date().toISOString();
-  await db
-    .update(passwordResets)
-    .set({ used: true })
-    .where(and(eq(passwordResets.userId, row.id), eq(passwordResets.used, false)));
+  const id = uid("pwr");
   await db.insert(passwordResets).values({
-    id: uid("pwr"),
+    id,
     userId: row.id,
     tokenHash: hashToken(token),
     expires: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     used: false,
-    created,
+    created: new Date().toISOString(),
   });
-  return { token, name: row.name, email: row.email };
+  return { id, userId: row.id, token, name: row.name, email: row.email };
+}
+
+export async function finalizePasswordResetIssue(input: {
+  id: string;
+  userId: string;
+  delivered: boolean;
+}): Promise<void> {
+  const db = getDb();
+  if (!input.delivered) {
+    await db.delete(passwordResets).where(eq(passwordResets.id, input.id));
+    return;
+  }
+  await db
+    .update(passwordResets)
+    .set({ used: true })
+    .where(and(eq(passwordResets.userId, input.userId), eq(passwordResets.used, false), ne(passwordResets.id, input.id)));
 }
 
 async function loadValidReset(token: string) {
@@ -1031,16 +1045,19 @@ export async function assertPasswordResetToken(token: string): Promise<void> {
 export async function resetPasswordWithToken(token: string, password: string): Promise<User> {
   assertPassword(password);
   const row = await loadValidReset(token);
-  const db = getDb();
-  await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, row.userId));
-  await db.update(passwordResets).set({ used: true }).where(eq(passwordResets.id, row.id));
-  const sessionVersion = await bumpSessionVersion(row.userId);
-  await createSession(row.userId, sessionVersion);
-  await writeAudit(row.userId, "RESET_PASSWORD", row.userId, "—", "senha redefinida");
   const user = await loadUser(row.userId);
   if (!user || user.status !== "active") {
     throw new Error("Este acesso está desativado. Fale com o administrador.");
   }
+  const db = getDb();
+  await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, row.userId));
+  await db
+    .update(passwordResets)
+    .set({ used: true })
+    .where(and(eq(passwordResets.userId, row.userId), eq(passwordResets.used, false)));
+  const sessionVersion = await bumpSessionVersion(row.userId);
+  await createSession(row.userId, sessionVersion);
+  await writeAudit(row.userId, "RESET_PASSWORD", row.userId, "—", "senha redefinida");
   return user;
 }
 
