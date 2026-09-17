@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     } catch (caught) {
       mail = {
         sent: false,
-        error: caught instanceof Error ? caught.message : "Não foi possível enviar o e-mail.",
+        error: publicError(caught, "Não foi possível enviar o e-mail."),
       };
     }
     return jsonOk({ invitation, emailSent: mail.sent, emailError: mail.error });

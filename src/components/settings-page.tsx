@@ -21,22 +21,68 @@ export function SettingsPage({
   onToggleCompany: (id: string, is_active: boolean) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<"company" | "category" | null>(null);
+  const [pendingCompany, setPendingCompany] = useState<Company | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#10B981");
   const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const activeCompanies = companies.filter((item) => item.is_active).length;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (modal === "company") {
-      await onCreateCompany({ name, color });
-      setSuccess("Empresa adicionada com sucesso.");
-    } else if (modal === "category") {
-      await onCreateCategory({ name, color });
-      setSuccess("Categoria adicionada com sucesso.");
+    setError("");
+    try {
+      if (modal === "company") {
+        await onCreateCompany({ name, color });
+        setSuccess("Empresa adicionada com sucesso.");
+      } else if (modal === "category") {
+        await onCreateCategory({ name, color });
+        setSuccess("Categoria adicionada com sucesso.");
+      }
+      setName("");
+      setColor("#10B981");
+      setModal(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível salvar.");
     }
-    setName("");
-    setColor("#10B981");
-    setModal(null);
+  }
+
+  async function handleToggleCompany(company: Company) {
+    const nextActive = !company.is_active;
+    if (company.is_active && activeCompanies <= 1) {
+      setError("É preciso manter ao menos uma empresa ativa.");
+      return;
+    }
+    if (company.is_active) {
+      setPendingCompany(company);
+      setError("");
+      return;
+    }
+    setError("");
+    try {
+      await onToggleCompany(company.id, nextActive);
+      setSuccess(`${company.name} reativada.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível atualizar a empresa.");
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!pendingCompany) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await onToggleCompany(pendingCompany.id, false);
+      setSuccess(`${pendingCompany.name} desativada. Novas solicitações ficam bloqueadas nessa unidade.`);
+      setPendingCompany(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível desativar a empresa.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -49,6 +95,7 @@ export function SettingsPage({
         </div>
       </section>
       {success ? <div className="success-banner">{success}</div> : null}
+      {error ? <div className="form-error">{error}</div> : null}
       <section className="settings-grid">
         <article className="panel settings-card">
           <header>
@@ -64,23 +111,28 @@ export function SettingsPage({
             </button>
           </header>
           <div className="settings-list">
-            {companies.map((company) => (
-              <div key={company.id}>
-                <i style={{ background: company.color }}>{company.initials}</i>
-                <span>
-                  <strong>{company.name}</strong>
-                  <small>{company.legal_name}</small>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void onToggleCompany(company.id, !company.is_active)}
-                >
-                  <em className={cls(company.is_active && "active")}>
-                    {company.is_active ? "Ativa" : "Inativa"}
-                  </em>
-                </button>
-              </div>
-            ))}
+            {companies.map((company) => {
+              const lastActive = company.is_active && activeCompanies <= 1;
+              return (
+                <div key={company.id}>
+                  <i style={{ background: company.color }}>{company.initials}</i>
+                  <span>
+                    <strong>{company.name}</strong>
+                    <small>{company.legal_name}</small>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={lastActive}
+                    title={lastActive ? "É preciso manter ao menos uma empresa ativa." : undefined}
+                    onClick={() => void handleToggleCompany(company)}
+                  >
+                    <em className={cls(company.is_active && "active")}>
+                      {company.is_active ? "Ativa" : "Inativa"}
+                    </em>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </article>
         <article className="panel settings-card">
@@ -131,6 +183,7 @@ export function SettingsPage({
                 <p>Parâmetros essenciais do ROM Flow</p>
               </div>
             </header>
+            {error ? <div className="form-error">{error}</div> : null}
             <label>
               Nome <span>*</span>
               <input value={name} onChange={(event) => setName(event.target.value)} required />
@@ -146,6 +199,40 @@ export function SettingsPage({
               <button className="primary-button">Salvar</button>
             </footer>
           </form>
+        </div>
+      ) : null}
+
+      {pendingCompany ? (
+        <div className="modal-layer">
+          <button className="modal-overlay" onClick={() => !busy && setPendingCompany(null)} />
+          <div className="action-modal">
+            <header>
+              <div className="modal-icon">
+                <Building2 size={20} />
+              </div>
+              <div>
+                <h3>Desativar {pendingCompany.name}?</h3>
+                <p className="modal-lead">
+                  A empresa some do seletor e novas solicitações ficam bloqueadas. Solicitações já
+                  abertas continuam visíveis para concluir o fluxo.
+                </p>
+              </div>
+            </header>
+            {error ? <div className="form-error">{error}</div> : null}
+            <footer>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={busy}
+                onClick={() => setPendingCompany(null)}
+              >
+                Cancelar
+              </button>
+              <button className="danger-button" type="button" disabled={busy} onClick={() => void confirmDeactivate()}>
+                {busy ? "Desativando..." : "Desativar empresa"}
+              </button>
+            </footer>
+          </div>
         </div>
       ) : null}
     </div>

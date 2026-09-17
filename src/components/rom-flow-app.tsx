@@ -20,7 +20,7 @@ import { KINDNESS_PHRASES } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Expense, RequestArea, Screen } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import { homeScreen } from "@/lib/workflow";
+import { homeScreen, isMaster } from "@/lib/workflow";
 
 export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const store = useStore();
@@ -55,13 +55,16 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   }, [currentCompanyId, onlyCompanyId, selectCompany, store.user]);
 
   useEffect(() => {
-    if (!currentCompanyId) {
+    if (!currentCompanyId || !store.user) {
       return;
     }
-    if (!accessibleCompanies.some((item) => item.id === currentCompanyId)) {
+    const stillListed = accessibleCompanies.some((item) => item.id === currentCompanyId);
+    const masterHold =
+      isMaster(store.user.role) && store.db.companies.some((item) => item.id === currentCompanyId);
+    if (!stillListed && !masterHold) {
       switchCompany();
     }
-  }, [accessibleCompanies, currentCompanyId, switchCompany]);
+  }, [accessibleCompanies, currentCompanyId, store.db.companies, store.user, switchCompany]);
 
   const closePopovers = useCallback(() => {
     setNotificationsOpen(false);
@@ -142,18 +145,33 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         </div>
       );
     }
-    return (
-      <CompanySelect
-        user={store.user}
-        companies={accessibleCompanies}
-        expenses={store.db.expenses}
-        onSelect={(id) => {
-          store.selectCompany(id);
-          setScreen(homeScreen(store.user?.role ?? "solicitante"));
-        }}
-        onLogout={store.logout}
-      />
-    );
+    const adminWithoutCompany =
+      isMaster(store.user.role) && (screen === "settings" || screen === "users" || screen === "audit");
+    if (!adminWithoutCompany) {
+      return (
+        <CompanySelect
+          user={store.user}
+          companies={accessibleCompanies}
+          expenses={store.db.expenses}
+          onSelect={(id) => {
+            store.selectCompany(id);
+            setScreen(homeScreen(store.user?.role ?? "solicitante"));
+          }}
+          onLogout={store.logout}
+          onOpenSettings={
+            isMaster(store.user.role)
+              ? () => {
+                  const fallback = accessibleCompanies[0] ?? store.db.companies[0];
+                  if (fallback) {
+                    store.selectCompany(fallback.id);
+                  }
+                  setScreen("settings");
+                }
+              : undefined
+          }
+        />
+      );
+    }
   }
 
   const companyNames = Object.fromEntries(store.db.companies.map((item) => [item.id, item.name]));
@@ -166,6 +184,14 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     const resolved = canAccessScreen(store.user!, current)
       ? current
       : homeScreen(role);
+    if (
+      !store.company &&
+      resolved !== "settings" &&
+      resolved !== "users" &&
+      resolved !== "audit"
+    ) {
+      return null;
+    }
     switch (resolved) {
       case "dashboard":
         return (
@@ -383,7 +409,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         <ExpenseDrawer
           expense={store.db.expenses.find((item) => item.id === selected.id) ?? selected}
           requester={store.findUser(selected.requester)}
-          companyName={store.findCompany(selected.company)?.name ?? store.company.name}
+          companyName={store.findCompany(selected.company)?.name ?? store.company?.name ?? "Empresa"}
           user={store.user}
           onClose={() => setSelected(null)}
           onAction={async (action, payload) => {

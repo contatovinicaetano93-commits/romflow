@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     if (!body.email || !body.password) {
       return jsonError("Informe e-mail e senha.");
     }
+    await assertRateLimit(clientKey(request, "login"), undefined, 20);
     await assertRateLimit(clientKey(request, `login:${body.email}`));
     const user = await loginWithPassword(body.email, body.password);
     return jsonOk({ user, snapshot: await getSnapshotSafe(user) });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Bell } from "lucide-react";
+import { ArrowRight, Bell, Settings } from "lucide-react";
 import { AREA_LABEL, ROLE_LABEL, STATUS_LABEL } from "@/lib/format";
 import type { Company, Expense, User } from "@/lib/types";
 import { companyInbox } from "@/lib/workflow";
@@ -12,12 +12,14 @@ export function CompanySelect({
   expenses,
   onSelect,
   onLogout,
+  onOpenSettings,
 }: {
   user: User;
   companies: Company[];
   expenses: Expense[];
   onSelect: (id: string) => void;
   onLogout: () => void;
+  onOpenSettings?: () => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -57,9 +59,16 @@ export function CompanySelect({
           <div className="empty-state">
             <strong>Nenhuma empresa disponível</strong>
             <span>
-              Peça a um master para atribuir empresas ao seu acesso. Se você é master, recarregue a
-              página ou cadastre uma empresa em Configurações.
+              {onOpenSettings
+                ? "Não há empresa ativa no momento. Abra as configurações para reativar ou cadastrar uma unidade."
+                : "Peça a um master para atribuir empresas ao seu acesso."}
             </span>
+            {onOpenSettings ? (
+              <button className="primary-button company-select-settings" type="button" onClick={onOpenSettings}>
+                <Settings size={16} />
+                Abrir configurações
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="company-grid">
@@ -123,6 +132,11 @@ export function CompanySelect({
       </div>
       <footer className="company-select-footer">
         <span>ROM Flow · Grupo ROM</span>
+        {onOpenSettings ? (
+          <button type="button" className="company-select-settings-link" onClick={onOpenSettings}>
+            Configurações do grupo
+          </button>
+        ) : null}
       </footer>
     </div>
   );

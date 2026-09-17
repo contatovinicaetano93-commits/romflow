@@ -184,7 +184,7 @@ export function AppShell({
   children,
 }: {
   role: Role;
-  company: Company;
+  company: Company | null;
   user: User;
   expenses: Expense[];
   screen: Screen;
@@ -246,16 +246,27 @@ export function AppShell({
             <X size={18} />
           </button>
         </div>
-        <button className="company-chip" onClick={onSwitchCompany}>
-          <span className="company-mini" style={{ background: company.color }}>
-            {company.initials}
-          </span>
-          <span>
-            <small>Empresa ativa</small>
-            <strong>{company.name}</strong>
-          </span>
-          <ChevronDown size={15} />
-        </button>
+        {company ? (
+          <button className="company-chip" onClick={onSwitchCompany}>
+            <span className="company-mini" style={{ background: company.color }}>
+              {company.initials}
+            </span>
+            <span>
+              <small>Empresa ativa</small>
+              <strong>{company.name}</strong>
+            </span>
+            <ChevronDown size={15} />
+          </button>
+        ) : (
+          <button className="company-chip" onClick={onSwitchCompany}>
+            <span className="company-mini">R</span>
+            <span>
+              <small>Grupo ROM</small>
+              <strong>Sem empresa ativa</strong>
+            </span>
+            <ChevronDown size={15} />
+          </button>
+        )}
         <nav className="side-nav" aria-label="Navegação principal">
           <small>AÇÕES</small>
           {items.map((item) => {

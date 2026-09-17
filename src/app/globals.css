@@ -617,3 +617,32 @@ body {
   opacity: 0.7;
 }
 
+.company-select-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.company-select-settings {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.company-select-settings-link {
+  background: none;
+  border: 0;
+  color: #34d399;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-list button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

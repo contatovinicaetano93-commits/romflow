@@ -45,13 +45,11 @@ import {
   parseExpenseType,
   parseRole,
   parseStatus,
-  validateEventDate,
-  validatePaymentDate,
   withEventDateObservation,
+  assertExpenseCreate,
 } from "@/lib/workflow";
 import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
-import { roundMoney } from "@/lib/format";
 import { assertPassword, bumpSessionVersion, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
 export type FinanceAction = RequestAction;
@@ -118,18 +116,34 @@ function mapExpense(row: typeof expenses.$inferSelect): Expense {
   };
 }
 
-async function resolveCompanyIds(companyIds: string[]): Promise<string[]> {
+async function resolveCompanyIds(
+  companyIds: string[],
+  mode: "invite" | "access" = "access",
+): Promise<string[]> {
   const unique = [...new Set(companyIds.filter(Boolean))];
   if (unique.length === 0) {
     throw new Error("Selecione ao menos uma empresa.");
   }
-  const rows = await getDb().select({ id: companies.id }).from(companies);
+  const rows = await getDb().select({ id: companies.id, isActive: companies.isActive }).from(companies);
   const valid = new Set(rows.map((row) => row.id));
-  const resolved = unique.filter((id) => valid.has(id));
-  if (resolved.length === 0) {
-    throw new Error("Selecione ao menos uma empresa válida.");
+  const active = new Set(rows.filter((row) => row.isActive).map((row) => row.id));
+  const resolved =
+    mode === "invite"
+      ? unique.filter((id) => active.has(id))
+      : unique.filter((id) => valid.has(id));
+  if (resolved.length === 0 || !resolved.some((id) => active.has(id))) {
+    throw new Error("Selecione ao menos uma empresa ativa.");
   }
   return resolved;
+}
+
+async function countOtherActiveMasters(excludeUserId: string): Promise<number> {
+  const adminRows = await getDb()
+    .select({ id: users.id, role: users.role, status: users.status })
+    .from(users);
+  return adminRows.filter(
+    (item) => item.id !== excludeUserId && item.status === "active" && parseRole(item.role) === "master",
+  ).length;
 }
 
 export async function listCompaniesByIds(companyIds: string[]): Promise<Company[]> {
@@ -434,18 +448,22 @@ export async function createExpenseRecord(
   if (!canAccessCompany(actor, input.company)) {
     throw new Error("Você não tem acesso a esta empresa.");
   }
+  const company = await findCompanyRow(input.company);
+  if (!company) {
+    throw new Error("Empresa não encontrada.");
+  }
+  if (!company.is_active) {
+    throw new Error("Esta empresa está inativa. Reative em Configurações para criar solicitações.");
+  }
   if (!canAccessArea(actor, input.area)) {
     throw new Error("Você não tem acesso a esta área de solicitação.");
   }
-  if (input.area === "financeiro") {
-    validatePaymentDate(input.expense_type, input.max_payment_date, input.payment_date_justification);
-    validateEventDate(input.expense_type, input.event_date);
-  }
+  const amount = assertExpenseCreate(input);
   const created = new Date().toISOString();
   const receipt = await persistStoredFile(input.receipt, "receipts", actor.id);
   const expense: Expense = {
     ...input,
-    amount: roundMoney(input.amount),
+    amount,
     description: withEventDateObservation(input.description, input.expense_type, input.event_date),
     requester: actor.id,
     status: initialStatus(input.area),
@@ -572,7 +590,7 @@ export async function applyFinanceActionRecord(
     receipt,
     updated: new Date().toISOString(),
   };
-  await db
+  const result = await db
     .update(expenses)
     .set({
       status: updated.status,
@@ -582,7 +600,11 @@ export async function applyFinanceActionRecord(
       receipt: updated.receipt,
       updated: updated.updated,
     })
-    .where(eq(expenses.id, expenseId));
+    .where(and(eq(expenses.id, expenseId), eq(expenses.status, current.status)))
+    .returning({ id: expenses.id });
+  if (result.length === 0) {
+    throw new Error("Esta solicitação já foi atualizada. Recarregue e tente de novo.");
+  }
   await writeAudit(actor.id, audit, expenseId, current.status, status);
   return updated;
 }
@@ -599,7 +621,7 @@ export async function createInvitationRecord(
   }
   const normalized = email.trim().toLowerCase();
   const resolvedRole = parseRole(role);
-  const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const resolvedCompanies = await resolveCompanyIds(companyIds, "invite");
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const [existingUser] = await db
@@ -764,10 +786,8 @@ export async function updateUserAccessRecord(
     throw new Error("Você não pode remover o próprio perfil de master.");
   }
   if (parseRole(row.role) === "master" && resolvedRole !== "master") {
-    const adminRows = await db.select({ id: users.id, role: users.role }).from(users);
-    const masters = adminRows.filter((item) => parseRole(item.role) === "master");
-    if (masters.length <= 1) {
-      throw new Error("É preciso manter ao menos um master.");
+    if ((await countOtherActiveMasters(userId)) === 0) {
+      throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
   const previousLinks = await db
@@ -798,7 +818,7 @@ export async function updateInvitationAccessRecord(
   areaIds: RequestArea[],
 ): Promise<Invitation> {
   const resolvedRole = parseRole(role);
-  const resolvedCompanies = await resolveCompanyIds(companyIds);
+  const resolvedCompanies = await resolveCompanyIds(companyIds, "invite");
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const [row] = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
@@ -833,11 +853,7 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   }
   const nextStatus = row.status === "active" ? "inactive" : "active";
   if (nextStatus === "inactive" && parseRole(row.role) === "master") {
-    const adminRows = await db.select({ id: users.id, role: users.role, status: users.status }).from(users);
-    const otherMasters = adminRows.filter(
-      (item) => item.id !== userId && item.status === "active" && parseRole(item.role) === "master",
-    );
-    if (otherMasters.length === 0) {
+    if ((await countOtherActiveMasters(userId)) === 0) {
       throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
@@ -861,11 +877,7 @@ export async function revokeUserAccessRecord(actor: User, userId: string): Promi
     throw new Error("Usuário não encontrado.");
   }
   if (parseRole(row.role) === "master") {
-    const adminRows = await db.select({ id: users.id, role: users.role, status: users.status }).from(users);
-    const otherMasters = adminRows.filter(
-      (item) => item.id !== userId && item.status === "active" && parseRole(item.role) === "master",
-    );
-    if (otherMasters.length === 0) {
+    if ((await countOtherActiveMasters(userId)) === 0) {
       throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
@@ -975,6 +987,15 @@ export async function updateCompanyStatusRecord(actor: User, companyId: string, 
   const [row] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
   if (!row) {
     throw new Error("Empresa não encontrada.");
+  }
+  if (row.isActive && !isActive) {
+    const activeRows = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.isActive, true));
+    if (activeRows.length <= 1) {
+      throw new Error("É preciso manter ao menos uma empresa ativa.");
+    }
   }
   await db.update(companies).set({ isActive }).where(eq(companies.id, companyId));
   await writeAudit(

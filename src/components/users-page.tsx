@@ -41,12 +41,13 @@ function CompanyPicker({
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
+  const visibleCompanies = companies.filter((item) => item.is_active || selected.includes(item.id));
   return (
     <div className="company-selection-group">
       <div className="company-selection-header">
         <p className="company-selection-label">Empresas de acesso</p>
         <div className="company-selection-actions">
-          <button type="button" onClick={() => onChange(companies.map((item) => item.id))}>
+          <button type="button" onClick={() => onChange(visibleCompanies.map((item) => item.id))}>
             Marcar todas
           </button>
           <span>•</span>
@@ -56,7 +57,7 @@ function CompanyPicker({
         </div>
       </div>
       <div className="company-checkbox-grid">
-        {companies.map((company) => {
+        {visibleCompanies.map((company) => {
           const checked = selected.includes(company.id);
           return (
             <label key={company.id} className={cls("company-checkbox-card", checked && "checked")}>
@@ -74,14 +75,14 @@ function CompanyPicker({
               <i className="company-dot" style={{ background: company.color }} />
               <span className="company-info">
                 <strong>{company.name}</strong>
-                <small>{company.legal_name}</small>
+                <small>{company.is_active ? company.legal_name : "Inativa"}</small>
               </span>
             </label>
           );
         })}
       </div>
       <p className="signup-field-hint">
-        O usuário só vê e opera nas empresas marcadas. Selecione ao menos uma.
+        O usuário só vê e opera nas empresas marcadas. Selecione ao menos uma empresa ativa.
       </p>
     </div>
   );

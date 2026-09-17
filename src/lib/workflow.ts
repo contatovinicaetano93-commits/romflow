@@ -1,8 +1,10 @@
 import { canAccessCompany } from "@/lib/access";
+import { roundMoney } from "@/lib/format";
 import type {
   Expense,
   ExpenseStatus,
   ExpenseType,
+  PaymentMethod,
   RequestAction,
   RequestArea,
   Role,
@@ -259,7 +261,13 @@ export function withEventDateObservation(description: string, type: ExpenseType,
 }
 
 export function validatePaymentDate(type: ExpenseType, date: string, justification: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error("Informe uma data de pagamento válida.");
+  }
   const days = daysFromToday(date);
+  if (Number.isNaN(days)) {
+    throw new Error("Informe uma data de pagamento válida.");
+  }
   if (days < 0) {
     throw new Error("A data de pagamento não pode ser no passado.");
   }
@@ -279,6 +287,66 @@ export function validatePaymentDate(type: ExpenseType, date: string, justificati
 
 export function defaultPaymentDate(type: ExpenseType): string {
   return isoDatePlus(isReimbursement(type) ? 5 : 15);
+}
+
+export function assertExpenseCreate(input: {
+  title: string;
+  description: string;
+  area: RequestArea;
+  expense_type: ExpenseType;
+  amount: number;
+  beneficiary_name: string;
+  payment_method: PaymentMethod;
+  pix_key: string;
+  bank_name: string;
+  agency: string;
+  account: string;
+  boleto_code: string;
+  max_payment_date: string;
+  payment_date_justification: string;
+  event_date: string;
+}): number {
+  if (!input.title.trim()) {
+    throw new Error("Informe o título.");
+  }
+  if (!input.description.trim()) {
+    throw new Error("Informe a descrição.");
+  }
+  const amount = roundMoney(input.amount);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Informe um valor válido.");
+  }
+  if (input.area !== "financeiro") {
+    return amount;
+  }
+  if (!(amount > 0)) {
+    throw new Error("Informe um valor maior que zero.");
+  }
+  if (!input.beneficiary_name.trim()) {
+    throw new Error("Informe o beneficiário.");
+  }
+  switch (input.payment_method) {
+    case "pix":
+      if (!input.pix_key.trim()) {
+        throw new Error("Informe a chave PIX.");
+      }
+      break;
+    case "ted":
+      if (!input.bank_name.trim() || !input.agency.trim() || !input.account.trim()) {
+        throw new Error("Informe banco, agência e conta.");
+      }
+      break;
+    case "boleto":
+      if (!input.boleto_code.trim()) {
+        throw new Error("Informe o código do boleto.");
+      }
+      break;
+    default:
+      return assertNever(input.payment_method);
+  }
+  validatePaymentDate(input.expense_type, input.max_payment_date, input.payment_date_justification);
+  validateEventDate(input.expense_type, input.event_date);
+  return amount;
 }
 
 export function screenForNewArea(area: RequestArea): Screen {

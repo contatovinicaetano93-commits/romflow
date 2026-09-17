@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     if (!body.email) {
       return jsonError("Informe o e-mail.");
     }
+    await assertRateLimit(clientKey(request, "forgot"), undefined, 20);
     await assertRateLimit(clientKey(request, `forgot:${body.email}`));
     const reset = await requestPasswordReset(body.email);
     if (reset) {
