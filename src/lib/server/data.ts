@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { canAccessCompany } from "@/lib/access";
 import { getDb } from "@/lib/db";
-import { uid, inviteToken } from "@/lib/db/ids";
+import { uid, inviteToken, hashToken } from "@/lib/db/ids";
 import {
   auditLogs,
   categories,
@@ -14,6 +14,7 @@ import {
   userCompanies,
   users,
   emailLogs,
+  passwordResets,
 } from "@/lib/db/schema";
 import type {
   AuditAction,
@@ -50,7 +51,8 @@ import {
 } from "@/lib/workflow";
 import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
-import { assertPassword, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
+import { roundMoney } from "@/lib/format";
+import { assertPassword, bumpSessionVersion, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
 
 export type FinanceAction = RequestAction;
 
@@ -232,7 +234,10 @@ function mapEmailLog(row: typeof emailLogs.$inferSelect): EmailLog {
   const kind = row.kind;
   return {
     id: row.id,
-    kind: kind === "invite" || kind === "expense_created" || kind === "expense_status" ? kind : "expense_status",
+    kind:
+      kind === "invite" || kind === "expense_created" || kind === "expense_status" || kind === "password_reset"
+        ? kind
+        : "expense_status",
     expenseId: row.expenseId,
     invitationId: row.invitationId,
     toEmail: row.toEmail,
@@ -353,6 +358,14 @@ export async function getSnapshot(actor: User): Promise<Database> {
   };
 }
 
+export async function getSnapshotSafe(actor: User): Promise<Database | null> {
+  try {
+    return await getSnapshot(actor);
+  } catch {
+    return null;
+  }
+}
+
 export async function loginWithPassword(email: string, password: string): Promise<User> {
   const db = getDb();
   const [row] = await db
@@ -432,6 +445,7 @@ export async function createExpenseRecord(
   const receipt = await persistStoredFile(input.receipt, "receipts", actor.id);
   const expense: Expense = {
     ...input,
+    amount: roundMoney(input.amount),
     description: withEventDateObservation(input.description, input.expense_type, input.event_date),
     requester: actor.id,
     status: initialStatus(input.area),
@@ -828,6 +842,9 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
     }
   }
   await db.update(users).set({ status: nextStatus }).where(eq(users.id, userId));
+  if (nextStatus === "inactive") {
+    await bumpSessionVersion(userId);
+  }
   await writeAudit(actor.id, "TOGGLE_USER", userId, row.status, nextStatus);
 }
 
@@ -853,6 +870,7 @@ export async function revokeUserAccessRecord(actor: User, userId: string): Promi
     }
   }
   await db.update(users).set({ status: "inactive" }).where(eq(users.id, userId));
+  await bumpSessionVersion(userId);
   await writeAudit(actor.id, "REVOKE_USER", userId, row.status, "inactive");
 }
 
@@ -947,6 +965,100 @@ export async function updateCategoryRecord(id: string, patch: Partial<Category>)
     updates.isActive = patch.is_active;
   }
   await getDb().update(categories).set(updates).where(eq(categories.id, id));
+}
+
+export async function updateCompanyStatusRecord(actor: User, companyId: string, isActive: boolean): Promise<Company> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode fazer isso.");
+  }
+  const db = getDb();
+  const [row] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+  if (!row) {
+    throw new Error("Empresa não encontrada.");
+  }
+  await db.update(companies).set({ isActive }).where(eq(companies.id, companyId));
+  await writeAudit(
+    actor.id,
+    "TOGGLE_COMPANY",
+    companyId,
+    row.isActive ? "ativa" : "inativa",
+    isActive ? "ativa" : "inativa",
+  );
+  return mapCompany({ ...row, isActive });
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ id: string; userId: string; token: string; name: string; email: string } | null> {
+  const normalized = email.trim().toLowerCase();
+  const db = getDb();
+  const [row] = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
+  if (!row || row.status !== "active") {
+    return null;
+  }
+  const token = inviteToken();
+  const id = uid("pwr");
+  await db.insert(passwordResets).values({
+    id,
+    userId: row.id,
+    tokenHash: hashToken(token),
+    expires: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    used: false,
+    created: new Date().toISOString(),
+  });
+  return { id, userId: row.id, token, name: row.name, email: row.email };
+}
+
+export async function finalizePasswordResetIssue(input: {
+  id: string;
+  userId: string;
+  delivered: boolean;
+}): Promise<void> {
+  const db = getDb();
+  if (!input.delivered) {
+    await db.delete(passwordResets).where(eq(passwordResets.id, input.id));
+    return;
+  }
+  await db
+    .update(passwordResets)
+    .set({ used: true })
+    .where(and(eq(passwordResets.userId, input.userId), eq(passwordResets.used, false), ne(passwordResets.id, input.id)));
+}
+
+async function loadValidReset(token: string) {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(passwordResets)
+    .where(eq(passwordResets.tokenHash, hashToken(token)))
+    .limit(1);
+  if (!row || row.used || new Date(row.expires).getTime() < Date.now()) {
+    throw new Error("Link inválido ou expirado. Solicite uma nova redefinição de senha.");
+  }
+  return row;
+}
+
+export async function assertPasswordResetToken(token: string): Promise<void> {
+  await loadValidReset(token);
+}
+
+export async function resetPasswordWithToken(token: string, password: string): Promise<User> {
+  assertPassword(password);
+  const row = await loadValidReset(token);
+  const user = await loadUser(row.userId);
+  if (!user || user.status !== "active") {
+    throw new Error("Este acesso está desativado. Fale com o administrador.");
+  }
+  const db = getDb();
+  await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, row.userId));
+  await db
+    .update(passwordResets)
+    .set({ used: true })
+    .where(and(eq(passwordResets.userId, row.userId), eq(passwordResets.used, false)));
+  const sessionVersion = await bumpSessionVersion(row.userId);
+  await createSession(row.userId, sessionVersion);
+  await writeAudit(row.userId, "RESET_PASSWORD", row.userId, "—", "senha redefinida");
+  return user;
 }
 
 export async function findCompanyRow(id: string): Promise<Company | undefined> {

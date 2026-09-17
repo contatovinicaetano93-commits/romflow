@@ -124,6 +124,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           const session = await store.login(email, password);
           setScreen(homeScreen(session.role));
         }}
+        onForgot={store.requestPasswordReset}
       />
     );
   }
@@ -299,6 +300,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onCreateCompany={store.createCompany}
             onCreateCategory={store.createCategory}
             onToggleCategory={(id, is_active) => store.updateCategory(id, { is_active })}
+            onToggleCompany={(id, is_active) => store.updateCompanyStatus(id, is_active)}
           />
         );
       default:

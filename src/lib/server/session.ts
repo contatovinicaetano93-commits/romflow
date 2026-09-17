@@ -12,6 +12,7 @@ const COOKIE = "romflow_session";
 
 type SessionPayload = {
   sub: string;
+  sv: number;
 };
 
 function secretKey(): Uint8Array {
@@ -46,8 +47,32 @@ async function sessionCookieSecure(): Promise<boolean> {
   return process.env.NODE_ENV === "production";
 }
 
-export async function createSession(userId: string): Promise<void> {
-  const token = await new SignJWT({ sub: userId } satisfies SessionPayload)
+async function readSessionVersion(userId: string): Promise<number> {
+  try {
+    const [row] = await getDb()
+      .select({ sessionVersion: users.sessionVersion })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return row?.sessionVersion ?? 1;
+  } catch {
+    return 1;
+  }
+}
+
+export async function bumpSessionVersion(userId: string): Promise<number> {
+  const next = (await readSessionVersion(userId)) + 1;
+  try {
+    await getDb().update(users).set({ sessionVersion: next }).where(eq(users.id, userId));
+  } catch {
+    // Column may not exist until ensureSeeded migrates the schema.
+  }
+  return next;
+}
+
+export async function createSession(userId: string, sessionVersion?: number): Promise<void> {
+  const sv = sessionVersion ?? (await readSessionVersion(userId));
+  const token = await new SignJWT({ sub: userId, sv } satisfies SessionPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
@@ -67,7 +92,7 @@ export async function clearSession(): Promise<void> {
   jar.delete(COOKIE);
 }
 
-async function readSessionUserId(): Promise<string | null> {
+async function readSession(): Promise<{ userId: string; sv: number } | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) {
@@ -75,7 +100,10 @@ async function readSessionUserId(): Promise<string | null> {
   }
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string") {
+      return null;
+    }
+    return { userId: payload.sub, sv: typeof payload.sv === "number" ? payload.sv : 1 };
   } catch {
     return null;
   }
@@ -104,12 +132,15 @@ export async function loadUser(userId: string): Promise<User | null> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const userId = await readSessionUserId();
-  if (!userId) {
+  const session = await readSession();
+  if (!session) {
     return null;
   }
-  const user = await loadUser(userId);
+  const user = await loadUser(session.userId);
   if (!user || user.status !== "active") {
+    return null;
+  }
+  if ((await readSessionVersion(user.id)) !== session.sv) {
     return null;
   }
   return user;
@@ -234,6 +265,24 @@ export async function ensureSeeded(): Promise<void> {
     await db.execute(sql`UPDATE expenses SET expense_type = 'reembolso_colaborador' WHERE expense_type = 'reembolso'`);
     await db.execute(sql`UPDATE expenses SET expense_type = 'outros' WHERE expense_type IN ('adiantamento', 'impostos')`);
     await db.execute(sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS event_date text NOT NULL DEFAULT ''`);
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 1`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id text PRIMARY KEY,
+        user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash text NOT NULL UNIQUE,
+        expires text NOT NULL,
+        used boolean NOT NULL DEFAULT false,
+        created text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key text PRIMARY KEY,
+        count integer NOT NULL,
+        reset_at text NOT NULL
+      )
+    `);
   } catch {
     // Columns may not exist until drizzle push; next request after schema sync will migrate.
   }

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     if (!token) {
       return jsonError("Token de convite não encontrado na URL. Verifique o link recebido.");
     }
-    assertRateLimit(clientKey(request, `invite:${token.slice(0, 12)}`));
+    await assertRateLimit(clientKey(request, `invite:${token.slice(0, 12)}`));
     const invitation = await getInvitationByToken(token);
     const companies = await listCompaniesByIds(invitation.companyIds);
     return jsonOk({ invitation, companies });

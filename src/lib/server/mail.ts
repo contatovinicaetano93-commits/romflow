@@ -26,6 +26,10 @@ export function appUrl(): string {
   return "http://localhost:3000";
 }
 
+export function resetUrl(token: string): string {
+  return `${appUrl()}/recuperar?token=${token}`;
+}
+
 export function inviteUrl(token: string): string {
   return `${appUrl()}/convite?token=${token}`;
 }
@@ -154,6 +158,33 @@ export async function sendInviteEmail(
         "Este convite expira em 30 dias.",
       ],
       ctaLabel: "Ativar meu acesso",
+      ctaHref: link,
+    }),
+  });
+  return { sent: result.sent, error: result.error };
+}
+
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  token: string,
+): Promise<{ sent: boolean; error?: string }> {
+  const link = resetUrl(token);
+  const result = await deliverEmail({
+    kind: "password_reset",
+    toEmail: email,
+    toName: name,
+    toRole: null,
+    subject: "Redefinir senha do ROM Flow",
+    text: `Olá, ${name}. Use este link para criar uma nova senha no ROM Flow.\n\n${link}\n\nO link expira em 2 horas. Se você não pediu isso, ignore este e-mail.`,
+    html: romflowEmailHtml({
+      title: "Redefinir sua senha",
+      greeting: `Olá, ${name}.`,
+      body: [
+        "Recebemos um pedido para redefinir a senha do ROM Flow.",
+        "O link expira em 2 horas. Se você não pediu isso, ignore este e-mail.",
+      ],
+      ctaLabel: "Criar nova senha",
       ctaHref: link,
     }),
   });

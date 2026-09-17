@@ -71,7 +71,12 @@ export function maskMoneyInput(raw: string): string {
 }
 
 export function parseMoneyInput(raw: string): number {
-  return Number(raw.replace(/\./g, "").replace(",", ".")) || 0;
+  return roundMoney(Number(raw.replace(/\./g, "").replace(",", ".")) || 0);
+}
+
+export function roundMoney(value: number): number {
+  const cents = Math.round(Number(`${Number(value) || 0}e2`));
+  return Number(`${cents}e-2`);
 }
 
 export const STATUS_LABEL: Record<ExpenseStatus, string> = {
@@ -162,6 +167,8 @@ export const AUDIT_LABEL: Record<AuditAction, string> = {
   UPDATE_USER: "Atualizou acesso de usuário",
   TOGGLE_USER: "Alterou status de usuário",
   REVOKE_USER: "Excluiu acesso de usuário",
+  RESET_PASSWORD: "Redefiniu senha",
+  TOGGLE_COMPANY: "Alterou status da empresa",
   ATTACH_PROOF: "Anexou recibo de pagamento",
   PROGRESS_EXPENSE: "Colocou em andamento",
   COMPLETE_EXPENSE: "Finalizou solicitação",
@@ -172,6 +179,7 @@ export const EMAIL_KIND_LABEL: Record<EmailLogKind, string> = {
   invite: "Convite de acesso",
   expense_created: "Nova solicitação",
   expense_status: "Movimentação de solicitação",
+  password_reset: "Redefinição de senha",
 };
 
 export const EMAIL_STATUS_LABEL: Record<EmailLogStatus, string> = {
