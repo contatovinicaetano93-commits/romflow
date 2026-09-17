@@ -175,7 +175,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDb(session.snapshot);
       return;
     }
-    await refreshData(session.user);
+    if (session.snapshot === null) {
+      setDb(EMPTY_DB);
+      return;
+    }
+    try {
+      await refreshData(session.user);
+    } catch {
+      setDb(EMPTY_DB);
+    }
   }, [company, refreshData]);
 
   useEffect(() => {
@@ -189,16 +197,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
         setNeedsSetup(session.needsSetup);
-        setUser(session.user);
-        syncSentryUser(session.user);
         if (session.snapshot) {
           setDb(session.snapshot);
-        } else if (session.user) {
-          const snapshot = await api<Database>("/api/data");
-          if (!cancelled) {
-            setDb(snapshot);
+        } else if (session.user && session.snapshot !== null) {
+          try {
+            const snapshot = await api<Database>("/api/data");
+            if (!cancelled) {
+              setDb(snapshot);
+            }
+          } catch {
+            if (!cancelled) {
+              setDb(EMPTY_DB);
+            }
           }
+        } else if (session.user) {
+          setDb(EMPTY_DB);
         }
+        if (cancelled) {
+          return;
+        }
+        setUser(session.user);
+        syncSentryUser(session.user);
       } catch {
         if (!cancelled) {
           setUser(null);
@@ -216,36 +235,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const result = await api<{ user: User; snapshot?: Database }>("/api/auth/login", {
+    const result = await api<{ user: User; snapshot?: Database | null }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+    if (result.snapshot) {
+      setDb(result.snapshot);
+    } else if (result.snapshot === null) {
+      setDb(EMPTY_DB);
+    } else {
+      try {
+        await refreshData(result.user);
+      } catch {
+        setDb(EMPTY_DB);
+      }
+    }
     setUser(result.user);
     syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
-    if (result.snapshot) {
-      setDb(result.snapshot);
-    } else {
-      await refreshData(result.user);
-    }
     return result.user;
   }, [refreshData]);
 
   const bootstrapAdmin = useCallback(async (name: string, email: string, password: string) => {
-    const result = await api<{ user: User; snapshot?: Database }>("/api/bootstrap", {
+    const result = await api<{ user: User; snapshot?: Database | null }>("/api/bootstrap", {
       method: "POST",
       body: JSON.stringify({ name, email, password }),
     });
+    if (result.snapshot) {
+      setDb(result.snapshot);
+    } else if (result.snapshot === null) {
+      setDb(EMPTY_DB);
+    } else {
+      try {
+        await refreshData(result.user);
+      } catch {
+        setDb(EMPTY_DB);
+      }
+    }
     setUser(result.user);
     syncSentryUser(result.user);
     setCompany(null);
     setNeedsSetup(false);
-    if (result.snapshot) {
-      setDb(result.snapshot);
-    } else {
-      await refreshData(result.user);
-    }
     return result.user;
   }, [refreshData]);
 
