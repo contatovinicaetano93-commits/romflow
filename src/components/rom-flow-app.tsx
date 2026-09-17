@@ -55,16 +55,13 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   }, [currentCompanyId, onlyCompanyId, selectCompany, store.user]);
 
   useEffect(() => {
-    if (!currentCompanyId || !store.user) {
+    if (!currentCompanyId) {
       return;
     }
-    const stillListed = accessibleCompanies.some((item) => item.id === currentCompanyId);
-    const masterHold =
-      isMaster(store.user.role) && store.db.companies.some((item) => item.id === currentCompanyId);
-    if (!stillListed && !masterHold) {
+    if (!accessibleCompanies.some((item) => item.id === currentCompanyId)) {
       switchCompany();
     }
-  }, [accessibleCompanies, currentCompanyId, store.db.companies, store.user, switchCompany]);
+  }, [accessibleCompanies, currentCompanyId, switchCompany]);
 
   const closePopovers = useCallback(() => {
     setNotificationsOpen(false);
@@ -161,7 +158,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           onOpenSettings={
             isMaster(store.user.role)
               ? () => {
-                  const fallback = accessibleCompanies[0] ?? store.db.companies[0];
+                  const fallback = accessibleCompanies[0];
                   if (fallback) {
                     store.selectCompany(fallback.id);
                   }
