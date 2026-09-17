@@ -6,11 +6,13 @@ import { ArrowRight, Eye, EyeOff, Lock, Mail, Shield, Sparkles, UserRound } from
 export function LoginPage({
   onLogin,
   onBootstrap,
+  onForgot,
   needsSetup,
   banner,
 }: {
   onLogin: (email: string, password: string) => Promise<void>;
   onBootstrap: (name: string, email: string, password: string) => Promise<void>;
+  onForgot: (email: string) => Promise<void>;
   needsSetup: boolean;
   banner?: string;
 }) {
@@ -21,6 +23,8 @@ export function LoginPage({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [forgot, setForgot] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -35,6 +39,9 @@ export function LoginPage({
           throw new Error("As senhas não coincidem.");
         }
         await onBootstrap(name, email, password);
+      } else if (forgot) {
+        await onForgot(email);
+        setForgotSent(true);
       } else {
         await onLogin(email, password);
       }
@@ -103,13 +110,22 @@ export function LoginPage({
           <span className="secure-label">
             <Lock size={14} /> ACESSO SEGURO
           </span>
-          <h2>{needsSetup ? "Criar primeiro acesso" : "Bem-vindo de volta"}</h2>
+          <h2>
+            {needsSetup ? "Criar primeiro acesso" : forgot ? "Recuperar senha" : "Bem-vindo de volta"}
+          </h2>
           <p>
             {needsSetup
               ? "Cadastre o administrador do grupo para começar a usar o ROM Flow."
-              : "Entre com suas credenciais corporativas para continuar."}
+              : forgot
+                ? "Informe seu e-mail corporativo. Se houver uma conta ativa, enviamos o link para criar uma senha nova."
+                : "Entre com suas credenciais corporativas para continuar."}
           </p>
           {banner ? <div className="success-banner mb-4">{banner}</div> : null}
+          {forgotSent ? (
+            <div className="success-banner mb-4">
+              Se o e-mail estiver cadastrado, o link de redefinição já saiu. Confira a caixa de entrada.
+            </div>
+          ) : null}
           {needsSetup ? (
             <label>
               Nome completo
@@ -136,25 +152,27 @@ export function LoginPage({
               />
             </div>
           </label>
-          <label>
-            Senha
-            <div className="input-with-icon">
-              <Lock size={18} />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((value) => !value)}
-                aria-label="Mostrar senha"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </label>
+          {needsSetup || (!forgot && !forgotSent) ? (
+            <label>
+              Senha
+              <div className="input-with-icon">
+                <Lock size={18} />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label="Mostrar senha"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
+          ) : null}
           {needsSetup ? (
             <label>
               Confirmar senha
@@ -170,20 +188,50 @@ export function LoginPage({
             </label>
           ) : null}
           {error ? <div className="form-error">{error}</div> : null}
-          <button className="primary-button login-submit" disabled={loading}>
-            {loading ? (
-              <span className="spinner" />
-            ) : needsSetup ? (
-              "Criar acesso de administrador"
-            ) : (
-              <>
-                Entrar no ROM Flow <ArrowRight size={18} />
-              </>
-            )}
-          </button>
+          {forgotSent ? (
+            <button className="primary-button login-submit" type="button" onClick={() => { setForgot(false); setForgotSent(false); setError(""); }}>
+              Voltar ao login
+            </button>
+          ) : (
+            <button className="primary-button login-submit" disabled={loading}>
+              {loading ? (
+                <span className="spinner" />
+              ) : needsSetup ? (
+                "Criar acesso de administrador"
+              ) : forgot ? (
+                "Enviar link de senha"
+              ) : (
+                <>
+                  Entrar no ROM Flow <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          )}
           {needsSetup ? null : (
             <div className="login-help">
-              <span>Problemas para acessar?</span>
+              {forgot ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgot(false);
+                    setForgotSent(false);
+                    setError("");
+                  }}
+                >
+                  Voltar ao login
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgot(true);
+                    setForgotSent(false);
+                    setError("");
+                  }}
+                >
+                  Esqueci a senha
+                </button>
+              )}
               <a href="mailto:adm@romconcept.com.br?subject=Acesso%20ROM%20Flow">Fale com o administrador</a>
             </div>
           )}

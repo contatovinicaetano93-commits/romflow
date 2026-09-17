@@ -90,6 +90,7 @@ type StoreValue = {
   company: Company | null;
   login: (email: string, password: string) => Promise<User>;
   bootstrapAdmin: (name: string, email: string, password: string) => Promise<User>;
+  requestPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   selectCompany: (id: string) => void;
   switchCompany: () => void;
@@ -126,6 +127,7 @@ type StoreValue = {
     areaIds: RequestArea[],
   ) => Promise<void>;
   createCompany: (input: { name: string; color: string }) => Promise<void>;
+  updateCompanyStatus: (companyId: string, isActive: boolean) => Promise<void>;
   createCategory: (input: { name: string; color: string }) => Promise<void>;
   updateCategory: (id: string, patch: Partial<Category>) => Promise<void>;
   findUser: (id: string) => User | undefined;
@@ -246,6 +248,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     return result.user;
   }, [refreshData]);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    await api("/api/auth/forgot", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }, []);
 
   const logout = useCallback(async () => {
     await api("/api/auth/logout", { method: "POST" });
@@ -451,6 +460,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [refreshData],
   );
 
+  const updateCompanyStatus = useCallback(
+    async (companyId: string, isActive: boolean) => {
+      await api("/api/companies", {
+        method: "PATCH",
+        body: JSON.stringify({ companyId, isActive }),
+      });
+      await refreshData();
+    },
+    [refreshData],
+  );
+
   const createCategory = useCallback(
     async (input: { name: string; color: string }) => {
       await api("/api/categories", {
@@ -491,6 +511,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       company,
       login,
       bootstrapAdmin,
+      requestPasswordReset,
       logout,
       selectCompany,
       switchCompany,
@@ -508,6 +529,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateUserAccess,
       updateInvitationAccess,
       createCompany,
+      updateCompanyStatus,
       createCategory,
       updateCategory,
       findUser,
@@ -539,9 +561,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectCompany,
       switchCompany,
       reload,
+      requestPasswordReset,
       revokeUserAccess,
       toggleUserStatus,
       updateCategory,
+      updateCompanyStatus,
       updateInvitationAccess,
       updateUserAccess,
       user,

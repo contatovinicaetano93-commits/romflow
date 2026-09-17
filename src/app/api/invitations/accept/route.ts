@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     if (!body.token || !body.name || !body.password) {
       return jsonError("Preencha nome e senha para ativar o acesso.");
     }
-    assertRateLimit(clientKey(request, `accept:${body.token.slice(0, 12)}`));
+    await assertRateLimit(clientKey(request, `accept:${body.token.slice(0, 12)}`));
     const user = await acceptInvitation(body.token, body.name, body.password);
     return jsonOk({ user });
   } catch (caught) {

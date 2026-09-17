@@ -63,6 +63,8 @@ export type AuditAction =
   | "UPDATE_USER"
   | "TOGGLE_USER"
   | "REVOKE_USER"
+  | "RESET_PASSWORD"
+  | "TOGGLE_COMPANY"
   | "ATTACH_PROOF"
   | "PROGRESS_EXPENSE"
   | "COMPLETE_EXPENSE"
@@ -180,7 +182,7 @@ export type AuditLog = {
   created: string;
 };
 
-export type EmailLogKind = "invite" | "expense_created" | "expense_status";
+export type EmailLogKind = "invite" | "expense_created" | "expense_status" | "password_reset";
 
 export type EmailLogStatus = "sent" | "failed";
 

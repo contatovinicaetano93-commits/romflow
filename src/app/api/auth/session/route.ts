@@ -1,4 +1,4 @@
-import { getSnapshot } from "@/lib/server/data";
+import { getSnapshotSafe } from "@/lib/server/data";
 import { jsonOk, publicError } from "@/lib/server/http";
 import { ensureSeeded, getCurrentUser, userCount } from "@/lib/server/session";
 
@@ -12,7 +12,7 @@ export async function GET() {
       {
         user,
         needsSetup: (await userCount()) === 0,
-        snapshot: user ? await getSnapshot(user) : null,
+        snapshot: user ? await getSnapshotSafe(user) : null,
       },
       200,
       { "Cache-Control": "no-store, max-age=0" },

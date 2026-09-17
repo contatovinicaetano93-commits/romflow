@@ -1,3 +1,7 @@
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import { rateLimits } from "@/lib/db/schema";
+
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
@@ -19,7 +23,7 @@ export function clientKey(request: Request, extra: string): string {
   return `${ip}:${extra.trim().toLowerCase()}`;
 }
 
-export function assertRateLimit(key: string, label = "Muitas tentativas. Aguarde alguns minutos e tente de novo."): void {
+function assertMemoryLimit(key: string, label: string): void {
   const now = Date.now();
   prune(now);
   const current = buckets.get(key);
@@ -30,5 +34,37 @@ export function assertRateLimit(key: string, label = "Muitas tentativas. Aguarde
   current.count += 1;
   if (current.count > MAX_ATTEMPTS) {
     throw new Error(label);
+  }
+}
+
+export async function assertRateLimit(
+  key: string,
+  label = "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+): Promise<void> {
+  const now = Date.now();
+  const resetAt = new Date(now + WINDOW_MS).toISOString();
+  try {
+    const db = getDb();
+    const [row] = await db.select().from(rateLimits).where(eq(rateLimits.key, key)).limit(1);
+    if (!row || new Date(row.resetAt).getTime() <= now) {
+      await db
+        .insert(rateLimits)
+        .values({ key, count: 1, resetAt })
+        .onConflictDoUpdate({
+          target: rateLimits.key,
+          set: { count: 1, resetAt },
+        });
+      return;
+    }
+    const next = row.count + 1;
+    if (next > MAX_ATTEMPTS) {
+      throw new Error(label);
+    }
+    await db.update(rateLimits).set({ count: next }).where(eq(rateLimits.key, key));
+  } catch (caught) {
+    if (caught instanceof Error && caught.message === label) {
+      throw caught;
+    }
+    assertMemoryLimit(key, label);
   }
 }

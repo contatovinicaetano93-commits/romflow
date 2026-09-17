@@ -1,4 +1,4 @@
-import { boolean, doublePrecision, jsonb, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, integer, jsonb, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import type { StoredFile } from "@/lib/types";
 
 export const companies = pgTable("companies", {
@@ -25,6 +25,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull(),
   status: text("status").notNull().default("active"),
+  sessionVersion: integer("session_version").notNull().default(1),
   created: text("created").notNull(),
 });
 
@@ -136,6 +137,23 @@ export const auditLogs = pgTable("audit_logs", {
   before: text("before").notNull(),
   after: text("after").notNull(),
   created: text("created").notNull(),
+});
+
+export const passwordResets = pgTable("password_resets", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expires: text("expires").notNull(),
+  used: boolean("used").notNull().default(false),
+  created: text("created").notNull(),
+});
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  resetAt: text("reset_at").notNull(),
 });
 
 export const emailLogs = pgTable("email_logs", {

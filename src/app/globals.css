@@ -502,7 +502,10 @@ body {
   .login-form-wrap {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    align-content: center;
+    align-content: start;
+    place-content: start;
+    padding-top: 24px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 }
 
@@ -592,10 +595,22 @@ body {
   cursor: pointer;
 }
 
-.login-help a {
+.login-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.login-help a,
+.login-help button {
   color: #34d399;
   font-weight: 700;
   text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
 
 .user-status.inactive {

@@ -11,12 +11,14 @@ export function SettingsPage({
   onCreateCompany,
   onCreateCategory,
   onToggleCategory,
+  onToggleCompany,
 }: {
   companies: Company[];
   categories: Category[];
   onCreateCompany: (input: { name: string; color: string }) => void | Promise<void>;
   onCreateCategory: (input: { name: string; color: string }) => void | Promise<void>;
   onToggleCategory: (id: string, is_active: boolean) => void | Promise<void>;
+  onToggleCompany: (id: string, is_active: boolean) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<"company" | "category" | null>(null);
   const [name, setName] = useState("");
@@ -69,9 +71,14 @@ export function SettingsPage({
                   <strong>{company.name}</strong>
                   <small>{company.legal_name}</small>
                 </span>
-                <em className={cls(company.is_active && "active")}>
-                  {company.is_active ? "Ativa" : "Inativa"}
-                </em>
+                <button
+                  type="button"
+                  onClick={() => void onToggleCompany(company.id, !company.is_active)}
+                >
+                  <em className={cls(company.is_active && "active")}>
+                    {company.is_active ? "Ativa" : "Inativa"}
+                  </em>
+                </button>
               </div>
             ))}
           </div>

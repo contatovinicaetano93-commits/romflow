@@ -63,6 +63,6 @@ Confirme na Vercel (Production) antes de convocar o time:
 5. Store Blob `ROMFLOWBLOB` conectado ao projeto (`ROMFLOWBLOB_STORE_ID`)
 6. Domínio `romflow.com.br` com HTTPS válido
 
-Primeiro acesso: um master já cadastrado convida o restante em **Usuários**. Convites inativos/desativados devem ser reativados na lista, não reconvidados pelo mesmo e-mail.
+Primeiro acesso: um master já cadastrado convida o restante em **Usuários**. Convites inativos/desativados devem ser reativados na lista, não reconvidados pelo mesmo e-mail. Quem esquecer a senha usa **Esqueci a senha** no login.
 
-Ainda fora deste recorte (próximas melhorias): recuperação de senha, rate limit compartilhado (Redis), valor monetário em `numeric` em vez de `doublePrecision`, desativar empresa via API, 2FA e sessão revogável antes de 30 dias.
+Ainda fora deste recorte: 2FA e valor monetário em `numeric` no banco (hoje o valor é arredondado para centavos na gravação).
