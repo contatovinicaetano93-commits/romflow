@@ -35,10 +35,10 @@ export function SettingsPage({
     try {
       if (modal === "company") {
         await onCreateCompany({ name, color });
-        setSuccess("Empresa adicionada com sucesso.");
+        setSuccess("Empresa adicionada.");
       } else if (modal === "category") {
         await onCreateCategory({ name, color });
-        setSuccess("Categoria adicionada com sucesso.");
+        setSuccess("Categoria adicionada.");
       }
       setName("");
       setColor("#10B981");
@@ -76,7 +76,7 @@ export function SettingsPage({
     setError("");
     try {
       await onToggleCompany(pendingCompany.id, false);
-      setSuccess(`${pendingCompany.name} desativada. Novas solicitações ficam bloqueadas nessa unidade.`);
+      setSuccess(`${pendingCompany.name} desativada. Solicitações novas ficam bloqueadas.`);
       setPendingCompany(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível desativar a empresa.");
@@ -95,7 +95,7 @@ export function SettingsPage({
         </div>
       </section>
       {success ? <div className="success-banner">{success}</div> : null}
-      {error ? <div className="form-error">{error}</div> : null}
+      {error && !modal && !pendingCompany ? <div className="form-error">{error}</div> : null}
       <section className="settings-grid">
         <article className="panel settings-card">
           <header>
@@ -213,8 +213,7 @@ export function SettingsPage({
               <div>
                 <h3>Desativar {pendingCompany.name}?</h3>
                 <p className="modal-lead">
-                  A empresa some do seletor e novas solicitações ficam bloqueadas. Solicitações já
-                  abertas continuam visíveis para concluir o fluxo.
+                  Ela sai do seletor e não recebe solicitações novas. As que já existem continuam no fluxo.
                 </p>
               </div>
             </header>

@@ -453,7 +453,7 @@ export async function createExpenseRecord(
     throw new Error("Empresa não encontrada.");
   }
   if (!company.is_active) {
-    throw new Error("Esta empresa está inativa. Reative em Configurações para criar solicitações.");
+    throw new Error("Esta empresa está inativa.");
   }
   if (!canAccessArea(actor, input.area)) {
     throw new Error("Você não tem acesso a esta área de solicitação.");

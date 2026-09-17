@@ -161,6 +161,10 @@ export function canAccessScreen(user: User, screen: Screen): boolean {
   return navItemsFor(user).some((item) => item.screen === screen);
 }
 
+export function isGroupAdminScreen(screen: Screen): boolean {
+  return screen === "settings" || screen === "users" || screen === "audit";
+}
+
 export function AppShell({
   role,
   company,
@@ -205,14 +209,8 @@ export function AppShell({
   children: ReactNode;
 }) {
   const allItems = navItemsFor(user);
-  const items = company
-    ? allItems
-    : allItems.filter(
-        (item) => item.screen === "settings" || item.screen === "users" || item.screen === "audit",
-      );
-  const tabs = company
-    ? bottomNavItems(user)
-    : items.slice(0, 4);
+  const items = company ? allItems : allItems.filter((item) => isGroupAdminScreen(item.screen));
+  const tabs = company ? bottomNavItems(user) : items.slice(0, 4);
   const recent = expenses.slice(0, 4);
   const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
 

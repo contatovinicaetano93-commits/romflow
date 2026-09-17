@@ -60,7 +60,7 @@ export function CompanySelect({
             <strong>Nenhuma empresa disponível</strong>
             <span>
               {onOpenSettings
-                ? "Não há empresa ativa no momento. Abra as configurações para reativar ou cadastrar uma unidade."
+                ? "Nenhuma empresa ativa. Reative ou cadastre em Configurações."
                 : "Peça a um master para atribuir empresas ao seu acesso."}
             </span>
             {onOpenSettings ? (

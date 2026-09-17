@@ -39,9 +39,10 @@ function assertMemoryLimit(key: string, label: string, max = MAX_ATTEMPTS): void
 
 export async function assertRateLimit(
   key: string,
-  label = "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
-  max = MAX_ATTEMPTS,
+  options: { label?: string; max?: number } = {},
 ): Promise<void> {
+  const label = options.label ?? "Muitas tentativas. Aguarde alguns minutos e tente de novo.";
+  const max = options.max ?? MAX_ATTEMPTS;
   const now = Date.now();
   const resetAt = new Date(now + WINDOW_MS).toISOString();
   try {
@@ -67,5 +68,12 @@ export async function assertRateLimit(
       throw caught;
     }
     assertMemoryLimit(key, label, max);
+  }
+}
+
+export async function assertRequestLimit(request: Request, action: string, detail?: string, ipMax = 20): Promise<void> {
+  await assertRateLimit(clientKey(request, action), { max: ipMax });
+  if (detail) {
+    await assertRateLimit(clientKey(request, `${action}:${detail}`));
   }
 }

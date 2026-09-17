@@ -200,6 +200,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDb(snapshot);
   }, [user]);
 
+  const settleUser = useCallback(
+    async (nextUser: User, snapshot?: Database | null) => {
+      setUser(nextUser);
+      syncSentryUser(nextUser);
+      setCompany(null);
+      setNeedsSetup(false);
+      if (applySnapshot(snapshot, setDb)) {
+        return;
+      }
+      try {
+        await refreshData(nextUser);
+      } catch {
+        setDb(EMPTY_DB);
+      }
+    },
+    [refreshData],
+  );
+
   const reload = useCallback(async () => {
     const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
       "/api/auth/session",
@@ -274,38 +292,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    setUser(result.user);
-    syncSentryUser(result.user);
-    setCompany(null);
-    setNeedsSetup(false);
-    if (!applySnapshot(result.snapshot, setDb)) {
-      try {
-        await refreshData(result.user);
-      } catch {
-        setDb(EMPTY_DB);
-      }
-    }
+    await settleUser(result.user, result.snapshot);
     return result.user;
-  }, [refreshData]);
+  }, [settleUser]);
 
   const bootstrapAdmin = useCallback(async (name: string, email: string, password: string) => {
     const result = await api<{ user: User; snapshot?: Database | null }>("/api/bootstrap", {
       method: "POST",
       body: JSON.stringify({ name, email, password }),
     });
-    setUser(result.user);
-    syncSentryUser(result.user);
-    setCompany(null);
-    setNeedsSetup(false);
-    if (!applySnapshot(result.snapshot, setDb)) {
-      try {
-        await refreshData(result.user);
-      } catch {
-        setDb(EMPTY_DB);
-      }
-    }
+    await settleUser(result.user, result.snapshot);
     return result.user;
-  }, [refreshData]);
+  }, [settleUser]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     await api("/api/auth/forgot", {
@@ -401,7 +399,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         await refreshData();
       } catch {
-        // The action already committed; keep the patched expense if the snapshot fails.
+        return;
       }
     },
     [refreshData],
@@ -435,17 +433,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         method: "POST",
         body: JSON.stringify({ token, name, password }),
       });
-      setUser(result.user);
-      syncSentryUser(result.user);
-      setCompany(null);
-      try {
-        await refreshData(result.user);
-      } catch {
-        setDb(EMPTY_DB);
-      }
+      await settleUser(result.user);
       return result.user;
     },
-    [refreshData],
+    [settleUser],
   );
 
   const toggleUserStatus = useCallback(

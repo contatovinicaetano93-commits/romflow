@@ -1,7 +1,7 @@
 import { createInvitationRecord, updateInvitationAccessRecord } from "@/lib/server/data";
 import { sendInviteEmail } from "@/lib/server/mail";
 import { ensureSeeded, requireAdmin } from "@/lib/server/session";
-import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 import type { RequestArea, Role } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return jsonOk({ invitation, emailSent: mail.sent, emailError: mail.error });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }
 
@@ -65,6 +65,6 @@ export async function PATCH(request: Request) {
     return jsonOk({ invitation });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }

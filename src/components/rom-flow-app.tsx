@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell, canAccessScreen } from "@/components/app-shell";
+import { AppShell, canAccessScreen, isGroupAdminScreen } from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
 import { CompanySelect } from "@/components/company-select";
 import { Dashboard } from "@/components/dashboard";
@@ -142,8 +142,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         </div>
       );
     }
-    const adminWithoutCompany =
-      isMaster(store.user.role) && (screen === "settings" || screen === "users" || screen === "audit");
+    const adminWithoutCompany = isMaster(store.user.role) && isGroupAdminScreen(screen);
     if (!adminWithoutCompany) {
       return (
         <CompanySelect
@@ -155,13 +154,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             setScreen(homeScreen(store.user?.role ?? "solicitante"));
           }}
           onLogout={store.logout}
-          onOpenSettings={
-            isMaster(store.user.role)
-              ? () => {
-                  setScreen("settings");
-                }
-              : undefined
-          }
+          onOpenSettings={isMaster(store.user.role) ? () => setScreen("settings") : undefined}
         />
       );
     }
@@ -177,12 +170,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     const resolved = canAccessScreen(store.user!, current)
       ? current
       : homeScreen(role);
-    if (
-      !store.company &&
-      resolved !== "settings" &&
-      resolved !== "users" &&
-      resolved !== "audit"
-    ) {
+    if (!store.company && !isGroupAdminScreen(resolved)) {
       return null;
     }
     switch (resolved) {
@@ -302,9 +290,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onInvite={store.inviteUser}
             onUpdateUser={store.updateUserAccess}
             onUpdateInvitation={store.updateInvitationAccess}
-            onToggle={async (userId) => {
-              await store.toggleUserStatus(userId);
-            }}
+            onToggle={store.toggleUserStatus}
             onRevoke={store.revokeUserAccess}
             onCancelInvite={store.cancelInvitation}
           />

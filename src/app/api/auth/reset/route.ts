@@ -1,6 +1,6 @@
 import { assertPasswordResetToken, getSnapshotSafe, resetPasswordWithToken } from "@/lib/server/data";
-import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
-import { assertRateLimit, clientKey } from "@/lib/server/rate-limit";
+import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { assertRequestLimit } from "@/lib/server/rate-limit";
 import { ensureSeeded } from "@/lib/server/session";
 
 export async function GET(request: Request) {
@@ -10,13 +10,12 @@ export async function GET(request: Request) {
     if (!token) {
       return jsonError("Link inválido ou expirado. Solicite uma nova redefinição de senha.");
     }
-    await assertRateLimit(clientKey(request, "reset"), undefined, 20);
-    await assertRateLimit(clientKey(request, `reset:${token.slice(0, 12)}`));
+    await assertRequestLimit(request, "reset", token.slice(0, 12));
     await assertPasswordResetToken(token);
     return jsonOk({ ok: true });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message.startsWith("Muitas tentativas") ? 429 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }
 
@@ -27,12 +26,11 @@ export async function POST(request: Request) {
     if (!body.token || !body.password) {
       return jsonError("Informe a nova senha.");
     }
-    await assertRateLimit(clientKey(request, "reset"), undefined, 20);
-    await assertRateLimit(clientKey(request, `reset:${body.token.slice(0, 12)}`));
+    await assertRequestLimit(request, "reset", body.token.slice(0, 12));
     const user = await resetPasswordWithToken(body.token, body.password);
     return jsonOk({ user, snapshot: await getSnapshotSafe(user) });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message.startsWith("Muitas tentativas") ? 429 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }
