@@ -23,7 +23,7 @@ export function clientKey(request: Request, extra: string): string {
   return `${ip}:${extra.trim().toLowerCase()}`;
 }
 
-function assertMemoryLimit(key: string, label: string): void {
+function assertMemoryLimit(key: string, label: string, max = MAX_ATTEMPTS): void {
   const now = Date.now();
   prune(now);
   const current = buckets.get(key);
@@ -32,15 +32,17 @@ function assertMemoryLimit(key: string, label: string): void {
     return;
   }
   current.count += 1;
-  if (current.count > MAX_ATTEMPTS) {
+  if (current.count > max) {
     throw new Error(label);
   }
 }
 
 export async function assertRateLimit(
   key: string,
-  label = "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+  options: { label?: string; max?: number } = {},
 ): Promise<void> {
+  const label = options.label ?? "Muitas tentativas. Aguarde alguns minutos e tente de novo.";
+  const max = options.max ?? MAX_ATTEMPTS;
   const now = Date.now();
   const resetAt = new Date(now + WINDOW_MS).toISOString();
   try {
@@ -57,7 +59,7 @@ export async function assertRateLimit(
       return;
     }
     const next = row.count + 1;
-    if (next > MAX_ATTEMPTS) {
+    if (next > max) {
       throw new Error(label);
     }
     await db.update(rateLimits).set({ count: next }).where(eq(rateLimits.key, key));
@@ -65,6 +67,13 @@ export async function assertRateLimit(
     if (caught instanceof Error && caught.message === label) {
       throw caught;
     }
-    assertMemoryLimit(key, label);
+    assertMemoryLimit(key, label, max);
+  }
+}
+
+export async function assertRequestLimit(request: Request, action: string, detail?: string, ipMax = 20): Promise<void> {
+  await assertRateLimit(clientKey(request, action), { max: ipMax });
+  if (detail) {
+    await assertRateLimit(clientKey(request, `${action}:${detail}`));
   }
 }

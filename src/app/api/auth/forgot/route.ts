@@ -1,7 +1,7 @@
 import { finalizePasswordResetIssue, requestPasswordReset } from "@/lib/server/data";
 import { sendPasswordResetEmail } from "@/lib/server/mail";
-import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
-import { assertRateLimit, clientKey } from "@/lib/server/rate-limit";
+import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { assertRequestLimit } from "@/lib/server/rate-limit";
 import { ensureSeeded } from "@/lib/server/session";
 
 export async function POST(request: Request) {
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     if (!body.email) {
       return jsonError("Informe o e-mail.");
     }
-    await assertRateLimit(clientKey(request, `forgot:${body.email}`));
+    await assertRequestLimit(request, "forgot", body.email);
     const reset = await requestPasswordReset(body.email);
     if (reset) {
       let delivered = false;
@@ -26,6 +26,6 @@ export async function POST(request: Request) {
     return jsonOk({ ok: true });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message.startsWith("Muitas tentativas") ? 429 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }

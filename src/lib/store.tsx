@@ -45,6 +45,22 @@ function syncSentryUser(user: User | null) {
   Sentry.setUser({ id: user.id, email: user.email, username: user.name });
 }
 
+const PUBLIC_AUTH_PATHS = [
+  "/api/auth/login",
+  "/api/auth/forgot",
+  "/api/auth/reset",
+  "/api/bootstrap",
+  "/api/invitations/validate",
+  "/api/invitations/accept",
+];
+
+let onUnauthorized: (() => void) | null = null;
+
+function isPublicAuthPath(path: string): boolean {
+  const pathname = path.split("?")[0] ?? path;
+  return PUBLIC_AUTH_PATHS.some((item) => pathname === item);
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const url =
@@ -69,6 +85,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     });
     const body = (await res.json().catch(() => ({}))) as T & { error?: string };
     if (!res.ok) {
+      if (res.status === 401 && !isPublicAuthPath(path)) {
+        onUnauthorized?.();
+      }
       throw new Error(body.error || "Não foi possível concluir a operação.");
     }
     return body;
@@ -138,6 +157,18 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
+function applySnapshot(snapshot: Database | null | undefined, setDb: (next: Database) => void): boolean {
+  if (snapshot) {
+    setDb(snapshot);
+    return true;
+  }
+  if (snapshot === null) {
+    setDb(EMPTY_DB);
+    return true;
+  }
+  return false;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -145,6 +176,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    onUnauthorized = () => {
+      setUser(null);
+      syncSentryUser(null);
+      setCompany(null);
+      setDb(EMPTY_DB);
+      setNotice("Sessão expirada. Entre de novo.");
+    };
+    return () => {
+      onUnauthorized = null;
+    };
+  }, []);
 
   const refreshData = useCallback(async (nextUser?: User | null) => {
     const active = nextUser === undefined ? user : nextUser;
@@ -155,6 +199,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const snapshot = await api<Database>("/api/data");
     setDb(snapshot);
   }, [user]);
+
+  const settleUser = useCallback(
+    async (nextUser: User, snapshot?: Database | null) => {
+      setUser(nextUser);
+      syncSentryUser(nextUser);
+      setCompany(null);
+      setNeedsSetup(false);
+      if (applySnapshot(snapshot, setDb)) {
+        return;
+      }
+      try {
+        await refreshData(nextUser);
+      } catch {
+        setDb(EMPTY_DB);
+      }
+    },
+    [refreshData],
+  );
 
   const reload = useCallback(async () => {
     const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
@@ -171,11 +233,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (company && !canAccessCompany(session.user, company.id)) {
       setCompany(null);
     }
-    if (session.snapshot) {
-      setDb(session.snapshot);
+    if (applySnapshot(session.snapshot, setDb)) {
       return;
     }
-    await refreshData(session.user);
+    try {
+      await refreshData(session.user);
+    } catch {
+      setDb(EMPTY_DB);
+    }
   }, [company, refreshData]);
 
   useEffect(() => {
@@ -191,12 +256,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setNeedsSetup(session.needsSetup);
         setUser(session.user);
         syncSentryUser(session.user);
-        if (session.snapshot) {
-          setDb(session.snapshot);
-        } else if (session.user) {
-          const snapshot = await api<Database>("/api/data");
-          if (!cancelled) {
-            setDb(snapshot);
+        if (applySnapshot(session.snapshot, setDb)) {
+          return;
+        }
+        if (session.user) {
+          try {
+            const snapshot = await api<Database>("/api/data");
+            if (!cancelled) {
+              setDb(snapshot);
+            }
+          } catch {
+            if (!cancelled) {
+              setDb(EMPTY_DB);
+            }
           }
         }
       } catch {
@@ -216,46 +288,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const result = await api<{ user: User; snapshot?: Database }>("/api/auth/login", {
+    const result = await api<{ user: User; snapshot?: Database | null }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    setUser(result.user);
-    syncSentryUser(result.user);
-    setCompany(null);
-    setNeedsSetup(false);
-    if (result.snapshot) {
-      setDb(result.snapshot);
-    } else {
-      try {
-        await refreshData(result.user);
-      } catch {
-        setDb(EMPTY_DB);
-      }
-    }
+    await settleUser(result.user, result.snapshot);
     return result.user;
-  }, [refreshData]);
+  }, [settleUser]);
 
   const bootstrapAdmin = useCallback(async (name: string, email: string, password: string) => {
-    const result = await api<{ user: User; snapshot?: Database }>("/api/bootstrap", {
+    const result = await api<{ user: User; snapshot?: Database | null }>("/api/bootstrap", {
       method: "POST",
       body: JSON.stringify({ name, email, password }),
     });
-    setUser(result.user);
-    syncSentryUser(result.user);
-    setCompany(null);
-    setNeedsSetup(false);
-    if (result.snapshot) {
-      setDb(result.snapshot);
-    } else {
-      try {
-        await refreshData(result.user);
-      } catch {
-        setDb(EMPTY_DB);
-      }
-    }
+    await settleUser(result.user, result.snapshot);
     return result.user;
-  }, [refreshData]);
+  }, [settleUser]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     await api("/api/auth/forgot", {
@@ -277,7 +325,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!user || !canAccessCompany(user, id)) {
         return;
       }
-      setCompany(db.companies.find((item) => item.id === id) ?? null);
+      const next = db.companies.find((item) => item.id === id);
+      if (!next?.is_active) {
+        return;
+      }
+      setCompany(next);
     },
     [db.companies, user],
   );
@@ -347,7 +399,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         await refreshData();
       } catch {
-        // The action already committed; keep the patched expense if the snapshot fails.
+        return;
       }
     },
     [refreshData],
@@ -381,13 +433,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         method: "POST",
         body: JSON.stringify({ token, name, password }),
       });
-      setUser(result.user);
-      syncSentryUser(result.user);
-      setCompany(null);
-      await refreshData(result.user);
+      await settleUser(result.user);
       return result.user;
     },
-    [refreshData],
+    [settleUser],
   );
 
   const toggleUserStatus = useCallback(
@@ -463,6 +512,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? { ...current, companyIds: [...current.companyIds, result.company.id] }
           : current,
       );
+      setCompany(result.company);
       await refreshData();
     },
     [refreshData],

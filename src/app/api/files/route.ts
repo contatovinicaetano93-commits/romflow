@@ -5,7 +5,8 @@ import {
   streamPrivateBlob,
 } from "@/lib/server/blob";
 import { userCanReadStoredPath } from "@/lib/server/data";
-import { jsonError, jsonOk, publicError } from "@/lib/server/http";
+import { errorStatus, jsonError, jsonOk, publicError } from "@/lib/server/http";
+import { assertRateLimit, clientKey } from "@/lib/server/rate-limit";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }
 
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
   try {
     await ensureSeeded();
     const user = await requireUser();
+    await assertRateLimit(clientKey(request, `upload:${user.id}`), { max: 30 });
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
@@ -49,6 +51,6 @@ export async function POST(request: Request) {
     return jsonOk({ file: stored });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }

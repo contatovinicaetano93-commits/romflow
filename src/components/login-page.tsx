@@ -117,13 +117,13 @@ export function LoginPage({
             {needsSetup
               ? "Cadastre o administrador do grupo para começar a usar o ROM Flow."
               : forgot
-                ? "Informe seu e-mail corporativo. Se houver uma conta ativa, enviamos o link para criar uma senha nova."
+                ? "Informe o e-mail. Se a conta existir e estiver ativa, enviamos o link."
                 : "Entre com suas credenciais corporativas para continuar."}
           </p>
           {banner ? <div className="success-banner mb-4">{banner}</div> : null}
           {forgotSent ? (
             <div className="success-banner mb-4">
-              Se o e-mail estiver cadastrado, o link de redefinição já saiu. Confira a caixa de entrada.
+              Se o e-mail estiver cadastrado, enviamos o link. Confira a caixa de entrada.
             </div>
           ) : null}
           {needsSetup ? (
