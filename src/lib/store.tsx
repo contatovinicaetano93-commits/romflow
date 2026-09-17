@@ -327,7 +327,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!user || !canAccessCompany(user, id)) {
         return;
       }
-      setCompany(db.companies.find((item) => item.id === id) ?? null);
+      const next = db.companies.find((item) => item.id === id);
+      if (!next?.is_active) {
+        return;
+      }
+      setCompany(next);
     },
     [db.companies, user],
   );

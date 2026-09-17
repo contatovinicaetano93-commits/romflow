@@ -204,8 +204,15 @@ export function AppShell({
   onToggleMenu: () => void;
   children: ReactNode;
 }) {
-  const items = navItemsFor(user);
-  const tabs = bottomNavItems(user);
+  const allItems = navItemsFor(user);
+  const items = company
+    ? allItems
+    : allItems.filter(
+        (item) => item.screen === "settings" || item.screen === "users" || item.screen === "audit",
+      );
+  const tabs = company
+    ? bottomNavItems(user)
+    : items.slice(0, 4);
   const recent = expenses.slice(0, 4);
   const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
 
