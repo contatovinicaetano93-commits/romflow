@@ -162,9 +162,8 @@ export function InvitePage({
             <h2>Não foi possível ativar seu acesso com este convite.</h2>
             <div className="form-error">{error}</div>
             <div className="login-help">
-              <span>Precisa de ajuda?</span>
               <button type="button" onClick={onGoToLogin}>
-                Fale com o administrador
+                Voltar ao login
               </button>
             </div>
           </div>

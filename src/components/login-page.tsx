@@ -188,6 +188,19 @@ export function LoginPage({
             </label>
           ) : null}
           {error ? <div className="form-error">{error}</div> : null}
+          {!needsSetup && !forgot && !forgotSent ? (
+            <button
+              type="button"
+              className="forgot-link"
+              onClick={() => {
+                setForgot(true);
+                setForgotSent(false);
+                setError("");
+              }}
+            >
+              Esqueci a senha
+            </button>
+          ) : null}
           {forgotSent ? (
             <button className="primary-button login-submit" type="button" onClick={() => { setForgot(false); setForgotSent(false); setError(""); }}>
               Voltar ao login
@@ -207,32 +220,18 @@ export function LoginPage({
               )}
             </button>
           )}
-          {needsSetup ? null : (
+          {needsSetup || !forgot || forgotSent ? null : (
             <div className="login-help">
-              {forgot ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForgot(false);
-                    setForgotSent(false);
-                    setError("");
-                  }}
-                >
-                  Voltar ao login
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForgot(true);
-                    setForgotSent(false);
-                    setError("");
-                  }}
-                >
-                  Esqueci a senha
-                </button>
-              )}
-              <a href="mailto:adm@romconcept.com.br?subject=Acesso%20ROM%20Flow">Fale com o administrador</a>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgot(false);
+                  setForgotSent(false);
+                  setError("");
+                }}
+              >
+                Voltar ao login
+              </button>
             </div>
           )}
         </form>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   FileText,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -28,6 +29,7 @@ import { ROLE_LABEL, STATUS_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { canAccessArea, canManageUsers, isAdminInbox } from "@/lib/workflow";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 
 type NavItem = {
   label: string;
@@ -176,6 +178,7 @@ export function AppShell({
   onNavigate,
   onSwitchCompany,
   onLogout,
+  onChangePassword,
   onBack,
   onReload,
   reloading = false,
@@ -197,6 +200,7 @@ export function AppShell({
   onNavigate: (screen: Screen) => void;
   onSwitchCompany: () => void;
   onLogout: () => void;
+  onChangePassword: (currentPassword: string, nextPassword: string) => Promise<void>;
   onBack: () => void;
   onReload: () => void;
   reloading?: boolean;
@@ -213,6 +217,7 @@ export function AppShell({
   const tabs = company ? bottomNavItems(user) : items.slice(0, 4);
   const recent = expenses.slice(0, 4);
   const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   function titleFor(current: Screen): string {
     switch (current) {
@@ -374,6 +379,15 @@ export function AppShell({
                   <button type="button" onClick={onSwitchCompany}>
                     Trocar empresa
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleProfile();
+                      setPasswordOpen(true);
+                    }}
+                  >
+                    <KeyRound size={14} /> Trocar senha
+                  </button>
                   <button type="button" onClick={onLogout}>
                     <LogOut size={14} /> Sair
                   </button>
@@ -416,6 +430,9 @@ export function AppShell({
           Menu
         </button>
       </nav>
+      {passwordOpen ? (
+        <ChangePasswordDialog onSubmit={onChangePassword} onClose={() => setPasswordOpen(false)} />
+      ) : null}
     </div>
   );
 }

@@ -110,6 +110,7 @@ type StoreValue = {
   login: (email: string, password: string) => Promise<User>;
   bootstrapAdmin: (name: string, email: string, password: string) => Promise<User>;
   requestPasswordReset: (email: string) => Promise<void>;
+  changePassword: (currentPassword: string, nextPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   selectCompany: (id: string) => void;
   switchCompany: () => void;
@@ -309,6 +310,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await api("/api/auth/forgot", {
       method: "POST",
       body: JSON.stringify({ email }),
+    });
+  }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, nextPassword: string) => {
+    await api("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, password: nextPassword }),
     });
   }, []);
 
@@ -570,6 +578,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       login,
       bootstrapAdmin,
       requestPasswordReset,
+      changePassword,
       logout,
       selectCompany,
       switchCompany,
@@ -601,6 +610,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyFinanceAction,
       bootstrapAdmin,
       cancelInvitation,
+      changePassword,
       clearNotice,
       company,
       companyExpenses,

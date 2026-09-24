@@ -84,8 +84,11 @@ export async function notifyExpenseChange(input: {
   const safeNote = note ? escapeHtml(note) : "";
   const results = await Promise.all(
     recipients.map((recipient) => {
+      const isRequester = recipient.id === input.expense.requester;
       const roleLabel = ROLE_LABEL[recipient.role];
-      const greeting = `Olá, ${recipient.name}. Você recebe este e-mail como ${roleLabel}.`;
+      const greeting = isRequester
+        ? `Olá, ${recipient.name}. Esta atualização é da solicitação que você criou.`
+        : `Olá, ${recipient.name}. Você recebe este e-mail como ${roleLabel} responsável pela área.`;
       const body = [
         `<strong>${escapeHtml(copy.headline)}</strong>`,
         `Empresa: <strong>${company}</strong>`,

@@ -366,6 +366,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           await store.logout();
           setLoginBanner("");
         }}
+        onChangePassword={store.changePassword}
         notificationsOpen={notificationsOpen}
         profileOpen={profileOpen}
         menuOpen={menuOpen}

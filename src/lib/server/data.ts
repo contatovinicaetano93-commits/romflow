@@ -35,6 +35,7 @@ import type {
 import {
   allowedActions,
   canAccessArea,
+  canAdminArea,
   canSeeExpense,
   defaultAreasForRole,
   initialStatus,
@@ -160,6 +161,9 @@ export async function listCompaniesByIds(companyIds: string[]): Promise<Company[
 async function replaceUserCompanies(userId: string, companyIds: string[]): Promise<void> {
   const db = getDb();
   await db.delete(userCompanies).where(eq(userCompanies.userId, userId));
+  if (companyIds.length === 0) {
+    return;
+  }
   await db.insert(userCompanies).values(
     companyIds.map((companyId) => ({
       userId,
@@ -214,6 +218,16 @@ async function loadAllUsers(): Promise<User[]> {
   }));
 }
 
+async function findUserRowByEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const [row] = await getDb()
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  return row ?? null;
+}
+
 export async function listNotificationRecipients(
   companyId: string,
   requesterId: string,
@@ -222,23 +236,28 @@ export async function listNotificationRecipients(
   const all = await loadAllUsers();
   const seen = new Set<string>();
   const recipients: User[] = [];
-  for (const user of all) {
+  function add(user: User) {
     if (user.status !== "active") {
-      continue;
-    }
-    const isRequester = user.id === requesterId;
-    const watches =
-      canAccessCompany(user, companyId) &&
-      (isMaster(user.role) || (canAccessArea(user, area) && user.role !== "solicitante"));
-    if (!isRequester && !watches) {
-      continue;
+      return;
     }
     const key = user.email.trim().toLowerCase();
-    if (seen.has(key)) {
-      continue;
+    if (!key || seen.has(key)) {
+      return;
     }
     seen.add(key);
     recipients.push(user);
+  }
+  const requester = all.find((item) => item.id === requesterId);
+  if (requester) {
+    add(requester);
+  }
+  for (const user of all) {
+    if (user.id === requesterId) {
+      continue;
+    }
+    if (canAccessCompany(user, companyId) && canAdminArea(user, area)) {
+      add(user);
+    }
   }
   return recipients;
 }
@@ -381,17 +400,12 @@ export async function getSnapshotSafe(actor: User): Promise<Database | null> {
 }
 
 export async function loginWithPassword(email: string, password: string): Promise<User> {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email.trim().toLowerCase()))
-    .limit(1);
+  const row = await findUserRowByEmail(email);
   if (!row || !(await verifyPassword(password, row.passwordHash))) {
     throw new Error("E-mail ou senha incorretos.");
   }
   if (row.status !== "active") {
-    throw new Error("Este acesso está desativado. Fale com o administrador.");
+    throw new Error("Este acesso está desativado. Use Esqueci a senha só depois que o acesso for reativado.");
   }
   const user = await loadUser(row.id);
   if (!user) {
@@ -624,23 +638,14 @@ export async function createInvitationRecord(
   const resolvedCompanies = await resolveCompanyIds(companyIds, "invite");
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
-  const [existingUser] = await db
-    .select({ id: users.id, status: users.status })
-    .from(users)
-    .where(eq(users.email, normalized))
-    .limit(1);
-  if (existingUser) {
-    if (existingUser.status !== "active") {
-      throw new Error(
-        "Este e-mail já tem um acesso desativado. Reative o usuário na lista em vez de criar um convite.",
-      );
-    }
-    throw new Error("Já existe um usuário com este e-mail.");
+  const existingUser = await findUserRowByEmail(normalized);
+  if (existingUser?.status === "active") {
+    throw new Error("Já existe um usuário ativo com este e-mail.");
   }
   const [existingInvite] = await db
     .select()
     .from(invitations)
-    .where(and(eq(invitations.email, normalized), eq(invitations.accepted, false)))
+    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)))
     .limit(1);
   if (existingInvite) {
     throw new Error("Já existe um convite pendente para este e-mail.");
@@ -724,9 +729,49 @@ function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): s
   return companyIds;
 }
 
+async function applyAcceptedInvitation(
+  userId: string,
+  invitation: Invitation,
+  name: string,
+  password: string,
+): Promise<User> {
+  const companyIds = companyIdsForAcceptedInvite(invitation.role, invitation.companyIds);
+  const areaIds = invitation.areaIds.length
+    ? invitation.areaIds
+    : defaultAreasForRole(invitation.role, invitation.role === "solicitante" ? ["financeiro"] : []);
+  const db = getDb();
+  await db
+    .update(users)
+    .set({
+      name: name.trim(),
+      email: invitation.email,
+      passwordHash: await hashPassword(password),
+      role: invitation.role,
+      status: "active",
+    })
+    .where(eq(users.id, userId));
+  await replaceUserCompanies(userId, companyIds);
+  await replaceUserAreas(userId, areaIds);
+  await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
+  const sessionVersion = await bumpSessionVersion(userId);
+  await createSession(userId, sessionVersion);
+  const updated = await loadUser(userId);
+  if (!updated) {
+    throw new Error("Usuário não encontrado.");
+  }
+  return updated;
+}
+
 export async function acceptInvitation(token: string, name: string, password: string): Promise<User> {
   assertPassword(password);
   const invitation = await getInvitationByToken(token);
+  const existing = await findUserRowByEmail(invitation.email);
+  if (existing) {
+    if (existing.status === "active") {
+      throw new Error("Já existe um usuário ativo com este e-mail.");
+    }
+    return applyAcceptedInvitation(existing.id, invitation, name, password);
+  }
   const created = new Date().toISOString();
   const nextUser: User = {
     id: uid("usr"),
@@ -842,6 +887,13 @@ export async function updateInvitationAccessRecord(
   };
 }
 
+async function cancelPendingInvitesForEmail(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  await getDb()
+    .delete(invitations)
+    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)));
+}
+
 export async function toggleUserStatusRecord(actor: User, userId: string): Promise<void> {
   if (actor.id === userId) {
     throw new Error("Você não pode desativar o próprio acesso.");
@@ -861,6 +913,7 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   if (nextStatus === "inactive") {
     await bumpSessionVersion(userId);
   }
+  await cancelPendingInvitesForEmail(row.email);
   await writeAudit(actor.id, "TOGGLE_USER", userId, row.status, nextStatus);
 }
 
@@ -883,6 +936,7 @@ export async function revokeUserAccessRecord(actor: User, userId: string): Promi
   }
   await db.update(users).set({ status: "inactive" }).where(eq(users.id, userId));
   await bumpSessionVersion(userId);
+  await cancelPendingInvitesForEmail(row.email);
   await writeAudit(actor.id, "REVOKE_USER", userId, row.status, "inactive");
 }
 
@@ -1011,14 +1065,13 @@ export async function updateCompanyStatusRecord(actor: User, companyId: string, 
 export async function requestPasswordReset(
   email: string,
 ): Promise<{ id: string; userId: string; token: string; name: string; email: string } | null> {
-  const normalized = email.trim().toLowerCase();
-  const db = getDb();
-  const [row] = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
+  const row = await findUserRowByEmail(email);
   if (!row || row.status !== "active") {
     return null;
   }
   const token = inviteToken();
   const id = uid("pwr");
+  const db = getDb();
   await db.insert(passwordResets).values({
     id,
     userId: row.id,
@@ -1068,7 +1121,7 @@ export async function resetPasswordWithToken(token: string, password: string): P
   const row = await loadValidReset(token);
   const user = await loadUser(row.userId);
   if (!user || user.status !== "active") {
-    throw new Error("Este acesso está desativado. Fale com o administrador.");
+    throw new Error("Este acesso está desativado.");
   }
   const db = getDb();
   await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, row.userId));
@@ -1080,6 +1133,26 @@ export async function resetPasswordWithToken(token: string, password: string): P
   await createSession(row.userId, sessionVersion);
   await writeAudit(row.userId, "RESET_PASSWORD", row.userId, "—", "senha redefinida");
   return user;
+}
+
+export async function changeOwnPassword(
+  actor: User,
+  currentPassword: string,
+  nextPassword: string,
+): Promise<void> {
+  assertPassword(nextPassword);
+  if (currentPassword === nextPassword) {
+    throw new Error("A nova senha deve ser diferente da atual.");
+  }
+  const db = getDb();
+  const [row] = await db.select().from(users).where(eq(users.id, actor.id)).limit(1);
+  if (!row || !(await verifyPassword(currentPassword, row.passwordHash))) {
+    throw new Error("Senha atual incorreta.");
+  }
+  await db.update(users).set({ passwordHash: await hashPassword(nextPassword) }).where(eq(users.id, actor.id));
+  await writeAudit(actor.id, "CHANGE_PASSWORD", actor.id, "—", "senha atualizada");
+  const sessionVersion = await bumpSessionVersion(actor.id);
+  await createSession(actor.id, sessionVersion);
 }
 
 export async function findCompanyRow(id: string): Promise<Company | undefined> {

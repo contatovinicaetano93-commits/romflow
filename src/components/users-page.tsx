@@ -599,8 +599,8 @@ export function UsersPage({
                 <div>
                   <h3>Criar usuário</h3>
                   <p className="modal-lead">
-                    Informe o e-mail, o perfil e as empresas. Depois copie o link para a pessoa
-                    finalizar o cadastro.
+                    Informe o e-mail, o perfil e as empresas. Se o e-mail já existiu e foi excluído,
+                    geramos um novo link para a pessoa cadastrar a senha de novo.
                   </p>
                 </div>
               </header>
@@ -693,7 +693,7 @@ export function UsersPage({
                 <h3>Excluir acesso</h3>
                 <p className="modal-lead">
                   {confirmRevoke.kind === "user"
-                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. O histórico de solicitações permanece.`
+                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. Você pode criar o mesmo e-mail de novo; o histórico de solicitações permanece.`
                     : `O convite de ${confirmRevoke.label} será cancelado.`}
                 </p>
               </div>
