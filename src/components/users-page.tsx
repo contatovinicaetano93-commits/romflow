@@ -152,6 +152,8 @@ export function UsersPage({
   users,
   invitations,
   companies,
+  companyId,
+  companyName,
   currentUserId,
   onInvite,
   onUpdateUser,
@@ -163,6 +165,8 @@ export function UsersPage({
   users: User[];
   invitations: Invitation[];
   companies: Company[];
+  companyId?: string | null;
+  companyName?: string | null;
   currentUserId: string;
   onInvite: (
     email: string,
@@ -206,20 +210,38 @@ export function UsersPage({
     null,
   );
   const [revoking, setRevoking] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+
+  const scopedUsers = useMemo(() => {
+    if (!companyId) {
+      return users;
+    }
+    return users.filter((item) => item.companyIds.includes(companyId));
+  }, [companyId, users]);
 
   const pendingInvites = useMemo(
-    () => invitations.filter((item) => !item.accepted),
-    [invitations],
+    () =>
+      invitations.filter((item) => {
+        if (item.accepted) {
+          return false;
+        }
+        if (!companyId) {
+          return true;
+        }
+        return item.companyIds.includes(companyId);
+      }),
+    [companyId, invitations],
   );
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return users
+    return scopedUsers
+      .filter((item) => (showInactive ? true : item.status === "active"))
       .filter((item) => `${item.name} ${item.email} ${ROLE_LABEL[item.role]} ${item.status}`.toLowerCase().includes(q))
       .sort(
         (a, b) => Number(b.status === "active") - Number(a.status === "active") || a.name.localeCompare(b.name, "pt-BR"),
       );
-  }, [query, users]);
+  }, [query, scopedUsers, showInactive]);
 
   function closeModal() {
     setOpen(false);
@@ -351,8 +373,9 @@ export function UsersPage({
           <span className="eyebrow">ACESSO E SEGURANÇA</span>
           <h2>Gestão de usuários</h2>
           <p>
-            Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Depois você pode
-            editar esses acessos a qualquer momento.
+            {companyName
+              ? `Acessos de ${companyName}. Excluir tira a pessoa deste painel na hora; o e-mail pode ser convidado de novo.`
+              : "Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Depois você pode editar esses acessos a qualquer momento."}
           </p>
         </div>
         <button
@@ -360,6 +383,7 @@ export function UsersPage({
           onClick={() => {
             setCreated(null);
             setError("");
+            setSelected(companyId ? [companyId] : []);
             setOpen(true);
           }}
         >
@@ -371,14 +395,14 @@ export function UsersPage({
         <article>
           <Users size={18} />
           <div>
-            <strong>{users.length}</strong>
+            <strong>{scopedUsers.length}</strong>
             <span>Usuários cadastrados</span>
           </div>
         </article>
         <article>
           <Shield size={18} />
           <div>
-            <strong>{users.filter((item) => item.status === "active").length}</strong>
+            <strong>{scopedUsers.filter((item) => item.status === "active").length}</strong>
             <span>Acessos ativos</span>
           </div>
         </article>
@@ -400,6 +424,14 @@ export function UsersPage({
               placeholder="Buscar usuário"
             />
           </div>
+          <label className="table-filter-toggle">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(event) => setShowInactive(event.target.checked)}
+            />
+            Mostrar inativos
+          </label>
         </div>
         <div className="expense-table-wrap">
           <table className="expense-table">
@@ -414,6 +446,20 @@ export function UsersPage({
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty-state">
+                      <strong>{query ? "Nenhum usuário encontrado" : "Nenhum acesso ativo neste negócio"}</strong>
+                      <span>
+                        {showInactive
+                          ? "Nenhum usuário corresponde à busca."
+                          : "Excluídos ficam como inativos. Marque “Mostrar inativos” para vê-los ou criar de novo."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
               {filtered.map((item) => (
                 <tr key={item.id}>
                   <td>

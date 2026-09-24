@@ -237,7 +237,9 @@ async function grantAllCompaniesToMasters(): Promise<void> {
   await db.insert(userCompanies).values(next);
 }
 
-export async function ensureSeeded(): Promise<void> {
+let seedPromise: Promise<void> | null = null;
+
+async function ensureSeededOnce(): Promise<void> {
   const db = getDb();
   await ensureSeedCompanies();
 
@@ -288,5 +290,15 @@ export async function ensureSeeded(): Promise<void> {
   }
 
   await grantAllCompaniesToMasters();
+}
+
+export async function ensureSeeded(): Promise<void> {
+  if (!seedPromise) {
+    seedPromise = ensureSeededOnce().catch((caught) => {
+      seedPromise = null;
+      throw caught;
+    });
+  }
+  await seedPromise;
 }
 

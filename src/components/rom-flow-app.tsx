@@ -46,12 +46,14 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const selectCompany = store.selectCompany;
   const switchCompany = store.switchCompany;
   const currentCompanyId = store.company?.id ?? null;
+  const companyOpening =
+    Boolean(store.company) && store.workingCompanyId !== store.company?.id;
 
   useEffect(() => {
     if (!store.user || currentCompanyId || !onlyCompanyId) {
       return;
     }
-    selectCompany(onlyCompanyId);
+    void selectCompany(onlyCompanyId);
   }, [currentCompanyId, onlyCompanyId, selectCompany, store.user]);
 
   useEffect(() => {
@@ -69,15 +71,21 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     setMenuOpen(false);
   }, []);
 
+  const loadOps = store.loadOps;
+  const currentUser = store.user;
+
   const navigate = useCallback(
     (next: Screen) => {
-      if (store.user && !canAccessScreen(store.user, next)) {
+      if (currentUser && !canAccessScreen(currentUser, next)) {
         return;
       }
       setScreen(next);
       closePopovers();
+      if (next === "audit") {
+        void loadOps().catch(() => undefined);
+      }
     },
-    [closePopovers, store.user],
+    [closePopovers, currentUser, loadOps],
   );
 
   if (!store.ready) {
@@ -148,9 +156,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         <CompanySelect
           user={store.user}
           companies={accessibleCompanies}
-          expenses={store.db.expenses}
+          expenses={store.pickerInbox}
           onSelect={(id) => {
-            store.selectCompany(id);
+            void store.selectCompany(id);
             setScreen(homeScreen(store.user?.role ?? "solicitante"));
           }}
           onLogout={store.logout}
@@ -158,6 +166,19 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         />
       );
     }
+  }
+
+  if (companyOpening && !(isMaster(store.user.role) && isGroupAdminScreen(screen))) {
+    return (
+      <div className="login-page">
+        <section className="login-form-wrap">
+          <div className="login-form">
+            <span className="secure-label">ROM FLOW</span>
+            <h2>Abrindo {store.company?.name ?? "sua empresa"}...</h2>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   const companyNames = Object.fromEntries(store.db.companies.map((item) => [item.id, item.name]));
@@ -286,6 +307,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             users={store.db.users}
             invitations={store.db.invitations}
             companies={store.db.companies}
+            companyId={store.company?.id ?? null}
+            companyName={store.company?.name ?? null}
             currentUserId={store.user!.id}
             onInvite={store.inviteUser}
             onUpdateUser={store.updateUserAccess}

@@ -678,3 +678,18 @@ body {
   justify-content: center;
 }
 
+.table-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a1a1aa;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.table-filter-toggle input {
+  accent-color: #10b981;
+}
+
