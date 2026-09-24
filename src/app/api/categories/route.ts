@@ -27,8 +27,8 @@ export async function PATCH(request: Request) {
     if (!body.id || !body.patch) {
       return jsonError("Informe a categoria.");
     }
-    await updateCategoryRecord(body.id, body.patch);
-    return jsonOk({ ok: true });
+    const category = await updateCategoryRecord(body.id, body.patch);
+    return jsonOk({ category });
   } catch (caught) {
     const message = publicError(caught);
     return jsonError(message, message === "Sessão expirada." ? 401 : 400);

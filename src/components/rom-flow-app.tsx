@@ -304,6 +304,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             categories={store.db.categories}
             onCreateCompany={store.createCompany}
             onCreateCategory={store.createCategory}
+            onUpdateCategory={(id, patch) => store.updateCategory(id, patch)}
             onToggleCategory={(id, is_active) => store.updateCategory(id, { is_active })}
             onToggleCompany={(id, is_active) => store.updateCompanyStatus(id, is_active)}
           />

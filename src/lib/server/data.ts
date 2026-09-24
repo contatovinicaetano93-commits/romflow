@@ -1019,18 +1019,45 @@ export async function createCategoryRecord(input: { name: string; color: string 
   return item;
 }
 
-export async function updateCategoryRecord(id: string, patch: Partial<Category>): Promise<void> {
-  const updates: Partial<typeof categories.$inferInsert> = {};
-  if (patch.name !== undefined) {
-    updates.name = patch.name;
+export async function updateCategoryRecord(id: string, patch: Partial<Category>): Promise<Category> {
+  const db = getDb();
+  const [row] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+  if (!row) {
+    throw new Error("Categoria não encontrada.");
   }
-  if (patch.color !== undefined) {
-    updates.color = patch.color;
+  const nextName = patch.name === undefined ? row.name : patch.name.trim();
+  if (!nextName) {
+    throw new Error("Informe o nome da categoria.");
   }
-  if (patch.is_active !== undefined) {
-    updates.isActive = patch.is_active;
+  if (nextName.toLowerCase() !== row.name.toLowerCase()) {
+    const [duplicate] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(sql`lower(${categories.name}) = ${nextName.toLowerCase()}`, ne(categories.id, id)))
+      .limit(1);
+    if (duplicate) {
+      throw new Error("Já existe uma categoria com este nome.");
+    }
   }
-  await getDb().update(categories).set(updates).where(eq(categories.id, id));
+  const nextColor = patch.color ?? row.color;
+  const nextActive = patch.is_active ?? row.isActive;
+  await db
+    .update(categories)
+    .set({
+      name: nextName,
+      color: nextColor,
+      isActive: nextActive,
+    })
+    .where(eq(categories.id, id));
+  if (nextName !== row.name) {
+    await db.update(expenses).set({ category: nextName }).where(eq(expenses.category, row.name));
+  }
+  return {
+    id: row.id,
+    name: nextName,
+    color: nextColor,
+    is_active: nextActive,
+  };
 }
 
 export async function updateCompanyStatusRecord(actor: User, companyId: string, isActive: boolean): Promise<Company> {

@@ -658,3 +658,23 @@ body {
   cursor: not-allowed;
 }
 
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.settings-row-actions button {
+  color: #a1a1aa;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+

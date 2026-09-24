@@ -1,15 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Building2, Plus, Tags } from "lucide-react";
+import { Building2, Pencil, Plus, Tags } from "lucide-react";
 import { cls } from "@/lib/format";
-import type { Category, Company } from "@/lib/types";
+import { assertNever, type Category, type Company } from "@/lib/types";
 
 export function SettingsPage({
   companies,
   categories,
   onCreateCompany,
   onCreateCategory,
+  onUpdateCategory,
   onToggleCategory,
   onToggleCompany,
 }: {
@@ -17,10 +18,12 @@ export function SettingsPage({
   categories: Category[];
   onCreateCompany: (input: { name: string; color: string }) => void | Promise<void>;
   onCreateCategory: (input: { name: string; color: string }) => void | Promise<void>;
+  onUpdateCategory: (id: string, patch: Pick<Category, "name" | "color">) => void | Promise<void>;
   onToggleCategory: (id: string, is_active: boolean) => void | Promise<void>;
   onToggleCompany: (id: string, is_active: boolean) => void | Promise<void>;
 }) {
   const [modal, setModal] = useState<"company" | "category" | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [pendingCompany, setPendingCompany] = useState<Company | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState("#10B981");
@@ -29,22 +32,60 @@ export function SettingsPage({
   const [busy, setBusy] = useState(false);
   const activeCompanies = companies.filter((item) => item.is_active).length;
 
+  function closeModal() {
+    setModal(null);
+    setEditingCategory(null);
+    setName("");
+    setColor("#10B981");
+    setError("");
+  }
+
+  function openCreate(kind: "company" | "category") {
+    setEditingCategory(null);
+    setName("");
+    setColor("#10B981");
+    setError("");
+    setModal(kind);
+  }
+
+  function openEditCategory(category: Category) {
+    setEditingCategory(category);
+    setName(category.name);
+    setColor(category.color);
+    setError("");
+    setModal("category");
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (!modal || busy) {
+      return;
+    }
+    setBusy(true);
     setError("");
     try {
-      if (modal === "company") {
-        await onCreateCompany({ name, color });
-        setSuccess("Empresa adicionada.");
-      } else if (modal === "category") {
-        await onCreateCategory({ name, color });
-        setSuccess("Categoria adicionada.");
+      switch (modal) {
+        case "company":
+          await onCreateCompany({ name, color });
+          setSuccess("Empresa adicionada.");
+          break;
+        case "category":
+          if (editingCategory) {
+            await onUpdateCategory(editingCategory.id, { name, color });
+            setSuccess("Categoria atualizada.");
+          } else {
+            await onCreateCategory({ name, color });
+            setSuccess("Categoria adicionada.");
+          }
+          break;
+        default:
+          assertNever(modal);
       }
-      setName("");
-      setColor("#10B981");
-      setModal(null);
+      closeModal();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -106,7 +147,7 @@ export function SettingsPage({
               <h3>Empresas do Grupo ROM</h3>
               <p>{companies.length} unidades cadastradas</p>
             </div>
-            <button type="button" onClick={() => setModal("company")}>
+            <button type="button" onClick={() => openCreate("company")}>
               <Plus size={13} /> Nova
             </button>
           </header>
@@ -144,7 +185,7 @@ export function SettingsPage({
               <h3>Categorias de despesas</h3>
               <p>{categories.filter((item) => item.is_active).length} categorias disponíveis</p>
             </div>
-            <button type="button" onClick={() => setModal("category")}>
+            <button type="button" onClick={() => openCreate("category")}>
               <Plus size={13} /> Nova
             </button>
           </header>
@@ -156,14 +197,32 @@ export function SettingsPage({
                   <strong>{category.name}</strong>
                   <small>Disponível nos formulários</small>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onToggleCategory(category.id, !category.is_active)}
-                >
-                  <em className={cls(category.is_active && "active")}>
-                    {category.is_active ? "Ativa" : "Inativa"}
-                  </em>
-                </button>
+                <div className="settings-row-actions">
+                  <button type="button" aria-label={`Editar ${category.name}`} onClick={() => openEditCategory(category)}>
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await onToggleCategory(category.id, !category.is_active);
+                          setError("");
+                        } catch (caught) {
+                          setError(
+                            caught instanceof Error
+                              ? caught.message
+                              : "Não foi possível atualizar a categoria.",
+                          );
+                        }
+                      })();
+                    }}
+                  >
+                    <em className={cls(category.is_active && "active")}>
+                      {category.is_active ? "Ativa" : "Inativa"}
+                    </em>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -172,15 +231,25 @@ export function SettingsPage({
 
       {modal ? (
         <div className="modal-layer">
-          <button className="modal-overlay" onClick={() => setModal(null)} />
+          <button className="modal-overlay" onClick={() => !busy && closeModal()} />
           <form className="action-modal" onSubmit={handleSubmit}>
             <header>
               <div className="modal-icon emerald">
-                {modal === "company" ? <Building2 size={20} /> : <Tags size={20} />}
+                {modal === "company" ? <Building2 size={20} /> : editingCategory ? <Pencil size={20} /> : <Tags size={20} />}
               </div>
               <div>
-                <h3>{modal === "company" ? "Nova empresa" : "Nova categoria"}</h3>
-                <p>Parâmetros essenciais do ROM Flow</p>
+                <h3>
+                  {modal === "company"
+                    ? "Nova empresa"
+                    : editingCategory
+                      ? "Editar categoria"
+                      : "Nova categoria"}
+                </h3>
+                <p>
+                  {editingCategory
+                    ? "O nome novo vale nos formulários e nas solicitações já cadastradas."
+                    : "Parâmetros essenciais do ROM Flow"}
+                </p>
               </div>
             </header>
             {error ? <div className="form-error">{error}</div> : null}
@@ -193,10 +262,12 @@ export function SettingsPage({
               <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
             </label>
             <footer>
-              <button className="secondary-button" type="button" onClick={() => setModal(null)}>
+              <button className="secondary-button" type="button" disabled={busy} onClick={closeModal}>
                 Cancelar
               </button>
-              <button className="primary-button">Salvar</button>
+              <button className="primary-button" disabled={busy}>
+                {busy ? "Salvando..." : "Salvar"}
+              </button>
             </footer>
           </form>
         </div>
