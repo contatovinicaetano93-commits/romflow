@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { canAccessCompany } from "./access";
+import { isTombstoneEmail } from "./user-directory";
 import type {
   Category,
   Company,
@@ -129,18 +130,20 @@ function mergeUsers(current: User[], incoming: User[]): User[] {
   return [...next.values()];
 }
 
-function patchUser(current: Database, user: User): Database {
+function patchUser(current: Database, user: User, releasedEmail?: string): Database {
+  const emailToDrop = (releasedEmail ?? (isTombstoneEmail(user.email) ? "" : user.email))
+    .trim()
+    .toLowerCase();
   return {
     ...current,
     users: current.users.some((item) => item.id === user.id)
       ? current.users.map((item) => (item.id === user.id ? user : item))
       : [...current.users, user],
-    invitations:
-      user.status === "inactive"
-        ? current.invitations.filter(
-            (item) => item.accepted || item.email.trim().toLowerCase() !== user.email.trim().toLowerCase(),
-          )
-        : current.invitations,
+    invitations: emailToDrop
+      ? current.invitations.filter(
+          (item) => item.accepted || item.email.trim().toLowerCase() !== emailToDrop,
+        )
+      : current.invitations,
   };
 }
 
@@ -179,6 +182,7 @@ type StoreValue = {
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
   revokeUserAccess: (userId: string) => Promise<void>;
+  resetAccessDirectory: () => Promise<number>;
   cancelInvitation: (invitationId: string) => Promise<void>;
   updateUserAccess: (
     userId: string,
@@ -559,6 +563,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (email: string, role: Role, companyIds: string[], areaIds: string[]) => {
       const result = await api<{
         invitation: Invitation;
+        releasedUserId?: string | null;
         emailSent: boolean;
         emailError?: string;
       }>("/api/invitations", {
@@ -567,9 +572,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       setDb((current) => ({
         ...current,
+        users: result.releasedUserId
+          ? current.users.filter((item) => item.id !== result.releasedUserId)
+          : current.users,
         invitations: [
           result.invitation,
-          ...current.invitations.filter((item) => item.id !== result.invitation.id),
+          ...current.invitations.filter(
+            (item) =>
+              item.id !== result.invitation.id &&
+              item.email.trim().toLowerCase() !== result.invitation.email.trim().toLowerCase(),
+          ),
         ],
       }));
       return { ...result.invitation, emailSent: result.emailSent, emailError: result.emailError };
@@ -604,11 +616,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const revokeUserAccess = useCallback(async (userId: string) => {
-    const result = await api<{ user: User }>("/api/users/revoke", {
+    const result = await api<{ user: User; releasedEmail: string }>("/api/users/revoke", {
       method: "POST",
       body: JSON.stringify({ userId }),
     });
-    setDb((current) => patchUser(current, result.user));
+    setDb((current) => patchUser(current, result.user, result.releasedEmail));
+  }, []);
+
+  const resetAccessDirectory = useCallback(async () => {
+    const result = await api<{ users: User[]; removed: number; invitations: Invitation[] }>(
+      "/api/users/reset-directory",
+      { method: "POST" },
+    );
+    setDb((current) => ({
+      ...current,
+      users: result.users,
+      invitations: result.invitations ?? [],
+    }));
+    return result.removed;
   }, []);
 
   const cancelInvitation = useCallback(async (invitationId: string) => {
@@ -761,6 +786,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       acceptInvite,
       toggleUserStatus,
       revokeUserAccess,
+      resetAccessDirectory,
       cancelInvitation,
       updateUserAccess,
       updateInvitationAccess,
@@ -801,6 +827,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       switchCompany,
       reload,
       requestPasswordReset,
+      resetAccessDirectory,
       revokeUserAccess,
       toggleUserStatus,
       updateCategory,

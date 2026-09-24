@@ -409,6 +409,14 @@ small {
   cursor: wait;
 }
 
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .mail-status {
   margin: 0 24px 8px;
   border-radius: 12px;

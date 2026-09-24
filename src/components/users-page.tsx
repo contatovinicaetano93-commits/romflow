@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Check, Copy, Link2, Mail, Pencil, Search, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Check, Copy, Eraser, Link2, Mail, Pencil, Search, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { ROLE_CLASS, ROLE_LABEL, AREA_LABEL, cls, formatDate } from "@/lib/format";
 import type { Company, Invitation, RequestArea, Role, User } from "@/lib/types";
+import { visibleDirectoryUsers } from "@/lib/user-directory";
 import { REQUEST_AREAS, areaForAdminRole } from "@/lib/workflow";
 
 function signupUrl(token: string) {
@@ -160,6 +161,7 @@ export function UsersPage({
   onUpdateInvitation,
   onToggle,
   onRevoke,
+  onResetDirectory,
   onCancelInvite,
 }: {
   users: User[];
@@ -183,6 +185,7 @@ export function UsersPage({
   ) => Promise<void>;
   onToggle: (userId: string) => void | Promise<void>;
   onRevoke: (userId: string) => Promise<void>;
+  onResetDirectory: () => Promise<number>;
   onCancelInvite: (invitationId: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
@@ -211,13 +214,19 @@ export function UsersPage({
   );
   const [revoking, setRevoking] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetPhrase, setResetPhrase] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetDone, setResetDone] = useState<number | null>(null);
+
+  const directoryUsers = useMemo(() => visibleDirectoryUsers(users), [users]);
 
   const scopedUsers = useMemo(() => {
     if (!companyId) {
-      return users;
+      return directoryUsers;
     }
-    return users.filter((item) => item.companyIds.includes(companyId));
-  }, [companyId, users]);
+    return directoryUsers.filter((item) => item.companyIds.includes(companyId));
+  }, [companyId, directoryUsers]);
 
   const pendingInvites = useMemo(
     () =>
@@ -340,6 +349,25 @@ export function UsersPage({
     }
   }
 
+  async function handleResetDirectory() {
+    if (resetPhrase.trim().toUpperCase() !== "ZERAR") {
+      setError("Digite ZERAR para confirmar.");
+      return;
+    }
+    setResetting(true);
+    setError("");
+    try {
+      const removed = await onResetDirectory();
+      setConfirmReset(false);
+      setResetPhrase("");
+      setResetDone(removed);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível zerar os cadastros.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   async function handleRevoke() {
     if (!confirmRevoke) {
       return;
@@ -374,23 +402,43 @@ export function UsersPage({
           <h2>Gestão de usuários</h2>
           <p>
             {companyName
-              ? `Acessos de ${companyName}. Excluir tira a pessoa deste painel na hora; o e-mail pode ser convidado de novo.`
-              : "Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Depois você pode editar esses acessos a qualquer momento."}
+              ? `Acessos de ${companyName}. Excluir libera o e-mail na hora para um novo convite.`
+              : "Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Excluir libera o e-mail para recadastro."}
           </p>
         </div>
-        <button
-          className="primary-button"
-          onClick={() => {
-            setCreated(null);
-            setError("");
-            setSelected(companyId ? [companyId] : []);
-            setOpen(true);
-          }}
-        >
-          <UserPlus size={16} /> Criar usuário
-        </button>
+        <div className="page-title-actions">
+          <button
+            className="danger-text-button"
+            type="button"
+            onClick={() => {
+              setConfirmReset(true);
+              setResetPhrase("");
+              setError("");
+            }}
+          >
+            <Eraser size={16} /> Zerar cadastros
+          </button>
+          <button
+            className="primary-button"
+            onClick={() => {
+              setCreated(null);
+              setError("");
+              setSelected(companyId ? [companyId] : []);
+              setOpen(true);
+            }}
+          >
+            <UserPlus size={16} /> Criar usuário
+          </button>
+        </div>
       </section>
-      {error && !open ? <div className="form-error">{error}</div> : null}
+      {resetDone !== null && !open ? (
+        <div className="success-banner mb-4">
+          Cadastros zerados. {resetDone} acesso{resetDone === 1 ? "" : "s"} removido
+          {resetDone === 1 ? "" : "s"}. Ficou só o Rodrigo (e o seu login). Recadastre a equipe pelos
+          convites.
+        </div>
+      ) : null}
+      {error && !open && !confirmReset && !confirmRevoke ? <div className="form-error">{error}</div> : null}
       <section className="user-kpis">
         <article>
           <Users size={18} />
@@ -454,7 +502,7 @@ export function UsersPage({
                       <span>
                         {showInactive
                           ? "Nenhum usuário corresponde à busca."
-                          : "Excluídos ficam como inativos. Marque “Mostrar inativos” para vê-los ou criar de novo."}
+                          : "Excluir libera o e-mail. Marque “Mostrar inativos” só para quem foi desativado sem excluir."}
                       </span>
                     </div>
                   </td>
@@ -739,7 +787,7 @@ export function UsersPage({
                 <h3>Excluir acesso</h3>
                 <p className="modal-lead">
                   {confirmRevoke.kind === "user"
-                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. Você pode criar o mesmo e-mail de novo; o histórico de solicitações permanece.`
+                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. O e-mail fica livre para um novo convite; o histórico de solicitações permanece.`
                     : `O convite de ${confirmRevoke.label} será cancelado.`}
                 </p>
               </div>
@@ -760,6 +808,65 @@ export function UsersPage({
               </button>
             </footer>
           </div>
+        </div>
+      ) : null}
+
+      {confirmReset ? (
+        <div className="modal-layer">
+          <button className="modal-overlay" onClick={() => !resetting && setConfirmReset(false)} />
+          <form
+            className="action-modal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleResetDirectory();
+            }}
+          >
+            <header>
+              <div className="modal-icon">
+                <Eraser size={20} />
+              </div>
+              <div>
+                <h3>Zerar cadastros</h3>
+                <p className="modal-lead">
+                  Remove todos os acessos e convites de todas as empresas, mantendo apenas o Rodrigo
+                  e o seu login. As solicitações antigas continuam no histórico. Depois é só recadastrar
+                  a equipe.
+                </p>
+              </div>
+            </header>
+            <label>
+              Digite ZERAR para confirmar
+              <input
+                value={resetPhrase}
+                onChange={(event) => setResetPhrase(event.target.value)}
+                autoComplete="off"
+                autoCapitalize="characters"
+                placeholder="ZERAR"
+              />
+            </label>
+            {error ? <div className="form-error">{error}</div> : null}
+            <footer>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={resetting}
+                onClick={() => {
+                  setConfirmReset(false);
+                  setResetPhrase("");
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="danger-button"
+                type="submit"
+                disabled={resetting || resetPhrase.trim().toUpperCase() !== "ZERAR"}
+              >
+                {resetting ? <span className="spinner" /> : null}
+                {resetting ? "Zerando..." : "Zerar cadastros"}
+              </button>
+            </footer>
+          </form>
         </div>
       ) : null}
     </div>

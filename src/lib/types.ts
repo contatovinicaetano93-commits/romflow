@@ -63,6 +63,7 @@ export type AuditAction =
   | "UPDATE_USER"
   | "TOGGLE_USER"
   | "REVOKE_USER"
+  | "RESET_DIRECTORY"
   | "RESET_PASSWORD"
   | "CHANGE_PASSWORD"
   | "TOGGLE_COMPANY"

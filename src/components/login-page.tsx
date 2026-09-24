@@ -123,7 +123,7 @@ export function LoginPage({
           {banner ? <div className="success-banner mb-4">{banner}</div> : null}
           {forgotSent ? (
             <div className="success-banner mb-4">
-              Se o e-mail estiver cadastrado, enviamos o link. Confira a caixa de entrada.
+              Se o e-mail estiver cadastrado e ativo, enviamos o link. Confira a caixa de entrada e o spam.
             </div>
           ) : null}
           {needsSetup ? (

@@ -55,6 +55,11 @@ import {
 import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
 import { assertPassword, bumpSessionVersion, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
+import {
+  isProtectedDirectoryUser,
+  isTombstoneEmail,
+  tombstoneEmailFor,
+} from "@/lib/user-directory";
 
 export type FinanceAction = RequestAction;
 
@@ -573,7 +578,7 @@ export async function getSnapshotSafe(actor: User): Promise<Database | null> {
 
 export async function loginWithPassword(email: string, password: string): Promise<User> {
   const row = await findUserRowByEmail(email);
-  if (!row || !(await verifyPassword(password, row.passwordHash))) {
+  if (!row || !(await verifyPassword(password, row.passwordHash)) || isTombstoneEmail(row.email)) {
     throw new Error("E-mail ou senha incorretos.");
   }
   if (row.status !== "active") {
@@ -795,13 +800,36 @@ export async function applyFinanceActionRecord(
   return updated;
 }
 
+async function cancelPendingInvitesForEmail(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  await getDb()
+    .delete(invitations)
+    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)));
+}
+
+async function tombstoneUserRow(row: typeof users.$inferSelect): Promise<string> {
+  const nextEmail = tombstoneEmailFor(row.id);
+  const db = getDb();
+  await db
+    .update(users)
+    .set({
+      status: "inactive",
+      email: nextEmail,
+    })
+    .where(eq(users.id, row.id));
+  await bumpSessionVersion(row.id);
+  await db.delete(passwordResets).where(eq(passwordResets.userId, row.id));
+  await cancelPendingInvitesForEmail(row.email);
+  return nextEmail;
+}
+
 export async function createInvitationRecord(
   actor: User,
   email: string,
   role: Role,
   companyIds: string[],
   areaIds: RequestArea[],
-): Promise<Invitation> {
+): Promise<{ invitation: Invitation; releasedUserId: string | null }> {
   if (!isMaster(actor.role)) {
     throw new Error("Apenas o master pode criar acessos.");
   }
@@ -811,17 +839,15 @@ export async function createInvitationRecord(
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const existingUser = await findUserRowByEmail(normalized);
-  if (existingUser?.status === "active") {
-    throw new Error("Já existe um usuário ativo com este e-mail.");
+  let releasedUserId: string | null = null;
+  if (existingUser) {
+    if (existingUser.status === "active" && !isTombstoneEmail(existingUser.email)) {
+      throw new Error("Já existe um usuário ativo com este e-mail.");
+    }
+    await tombstoneUserRow(existingUser);
+    releasedUserId = existingUser.id;
   }
-  const [existingInvite] = await db
-    .select()
-    .from(invitations)
-    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)))
-    .limit(1);
-  if (existingInvite) {
-    throw new Error("Já existe um convite pendente para este e-mail.");
-  }
+  await cancelPendingInvitesForEmail(normalized);
   const invitation: Invitation = {
     id: uid("inv"),
     email: email.trim().toLowerCase(),
@@ -854,7 +880,7 @@ export async function createInvitationRecord(
   }
   await replaceInvitationAreas(invitation.id, resolvedAreas);
   await writeAudit(actor.id, "CREATE_INVITE", invitation.id, "—", invitation.email);
-  return invitation;
+  return { invitation, releasedUserId };
 }
 
 export async function getInvitationByToken(token: string): Promise<Invitation> {
@@ -1059,13 +1085,6 @@ export async function updateInvitationAccessRecord(
   };
 }
 
-async function cancelPendingInvitesForEmail(email: string): Promise<void> {
-  const normalized = email.trim().toLowerCase();
-  await getDb()
-    .delete(invitations)
-    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)));
-}
-
 export async function toggleUserStatusRecord(actor: User, userId: string): Promise<User> {
   if (actor.id === userId) {
     throw new Error("Você não pode desativar o próprio acesso.");
@@ -1094,7 +1113,10 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   return updated;
 }
 
-export async function revokeUserAccessRecord(actor: User, userId: string): Promise<User> {
+export async function revokeUserAccessRecord(
+  actor: User,
+  userId: string,
+): Promise<{ user: User; releasedEmail: string }> {
   if (!isMaster(actor.role)) {
     throw new Error("Apenas o master pode excluir acessos.");
   }
@@ -1111,15 +1133,44 @@ export async function revokeUserAccessRecord(actor: User, userId: string): Promi
       throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
-  await db.update(users).set({ status: "inactive" }).where(eq(users.id, userId));
-  await bumpSessionVersion(userId);
-  await cancelPendingInvitesForEmail(row.email);
-  await writeAudit(actor.id, "REVOKE_USER", userId, row.status, "inactive");
+  const releasedEmail = row.email;
+  await tombstoneUserRow(row);
+  await writeAudit(actor.id, "REVOKE_USER", userId, releasedEmail, "excluído");
   const updated = await loadUser(userId);
   if (!updated) {
     throw new Error("Usuário não encontrado.");
   }
-  return updated;
+  return { user: updated, releasedEmail };
+}
+
+export async function resetAccessDirectoryRecord(
+  actor: User,
+): Promise<{ users: User[]; removed: number }> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode zerar os cadastros.");
+  }
+  const db = getDb();
+  const rows = await db.select().from(users);
+  let removed = 0;
+  for (const row of rows) {
+    if (isProtectedDirectoryUser(row, actor.id) || isTombstoneEmail(row.email)) {
+      continue;
+    }
+    if (parseRole(row.role) === "master" && (await countOtherActiveMasters(row.id)) === 0) {
+      continue;
+    }
+    await tombstoneUserRow(row);
+    removed += 1;
+  }
+  await db.delete(invitations);
+  await writeAudit(
+    actor.id,
+    "RESET_DIRECTORY",
+    "users",
+    String(rows.length),
+    `mantidos ${rows.length - removed}; removidos ${removed}`,
+  );
+  return { users: await loadAllUsers(), removed };
 }
 
 export async function cancelInvitationRecord(actor: User, invitationId: string): Promise<void> {
@@ -1275,7 +1326,7 @@ export async function requestPasswordReset(
   email: string,
 ): Promise<{ id: string; userId: string; token: string; name: string; email: string } | null> {
   const row = await findUserRowByEmail(email);
-  if (!row || row.status !== "active") {
+  if (!row || row.status !== "active" || isTombstoneEmail(row.email)) {
     return null;
   }
   const token = inviteToken();

@@ -315,6 +315,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             onUpdateInvitation={store.updateInvitationAccess}
             onToggle={store.toggleUserStatus}
             onRevoke={store.revokeUserAccess}
+            onResetDirectory={store.resetAccessDirectory}
             onCancelInvite={store.cancelInvitation}
           />
         );
