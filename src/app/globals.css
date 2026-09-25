@@ -75,6 +75,16 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: max-content;
+}
+
+.expense-table th:last-child,
+.expense-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface, #161618);
+  box-shadow: -12px 0 12px -12px #00000088;
+  z-index: 1;
 }
 
 .invitation-actions {

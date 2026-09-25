@@ -134,11 +134,12 @@ function patchUser(current: Database, user: User, releasedEmail?: string): Datab
   const emailToDrop = (releasedEmail ?? (isTombstoneEmail(user.email) ? "" : user.email))
     .trim()
     .toLowerCase();
+  const nextUser = isTombstoneEmail(user.email) ? { ...user, companyIds: [], areaIds: [] } : user;
   return {
     ...current,
-    users: current.users.some((item) => item.id === user.id)
-      ? current.users.map((item) => (item.id === user.id ? user : item))
-      : [...current.users, user],
+    users: current.users.some((item) => item.id === nextUser.id)
+      ? current.users.map((item) => (item.id === nextUser.id ? nextUser : item))
+      : [...current.users, nextUser],
     invitations: emailToDrop
       ? current.invitations.filter(
           (item) => item.accepted || item.email.trim().toLowerCase() !== emailToDrop,

@@ -817,6 +817,8 @@ async function tombstoneUserRow(row: typeof users.$inferSelect): Promise<string>
       email: nextEmail,
     })
     .where(eq(users.id, row.id));
+  await replaceUserCompanies(row.id, []);
+  await replaceUserAreas(row.id, []);
   await bumpSessionVersion(row.id);
   await db.delete(passwordResets).where(eq(passwordResets.userId, row.id));
   await cancelPendingInvitesForEmail(row.email);

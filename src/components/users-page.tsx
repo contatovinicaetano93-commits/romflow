@@ -221,25 +221,11 @@ export function UsersPage({
 
   const directoryUsers = useMemo(() => visibleDirectoryUsers(users), [users]);
 
-  const scopedUsers = useMemo(() => {
-    if (!companyId) {
-      return directoryUsers;
-    }
-    return directoryUsers.filter((item) => item.companyIds.includes(companyId));
-  }, [companyId, directoryUsers]);
+  const scopedUsers = directoryUsers;
 
   const pendingInvites = useMemo(
-    () =>
-      invitations.filter((item) => {
-        if (item.accepted) {
-          return false;
-        }
-        if (!companyId) {
-          return true;
-        }
-        return item.companyIds.includes(companyId);
-      }),
-    [companyId, invitations],
+    () => invitations.filter((item) => !item.accepted),
+    [invitations],
   );
 
   const filtered = useMemo(() => {
@@ -402,8 +388,8 @@ export function UsersPage({
           <h2>Gestão de usuários</h2>
           <p>
             {companyName
-              ? `Acessos de ${companyName}. Excluir libera o e-mail na hora para um novo convite.`
-              : "Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Excluir libera o e-mail para recadastro."}
+              ? `Cadastros de todos os negócios. Novo convite neste painel já marca ${companyName}. Apagar tira a pessoa de todas as empresas.`
+              : "Crie o usuário pelo e-mail, defina o perfil e as empresas permitidas. Apagar remove o acesso de todos os negócios."}
           </p>
         </div>
         <div className="page-title-actions">
@@ -498,11 +484,11 @@ export function UsersPage({
                 <tr>
                   <td colSpan={6}>
                     <div className="empty-state">
-                      <strong>{query ? "Nenhum usuário encontrado" : "Nenhum acesso ativo neste negócio"}</strong>
+                      <strong>{query ? "Nenhum usuário encontrado" : "Nenhum acesso ativo"}</strong>
                       <span>
                         {showInactive
                           ? "Nenhum usuário corresponde à busca."
-                          : "Excluir libera o e-mail. Marque “Mostrar inativos” só para quem foi desativado sem excluir."}
+                          : "Apagar tira a pessoa de todos os negócios e libera o e-mail. Marque “Mostrar inativos” só para quem foi desativado sem apagar."}
                       </span>
                     </div>
                   </td>
@@ -530,6 +516,20 @@ export function UsersPage({
                   <td>{formatDate(item.created)}</td>
                   <td>
                     <div className="user-row-actions">
+                      <button
+                        className="danger-text-button"
+                        type="button"
+                        disabled={item.id === currentUserId}
+                        onClick={() =>
+                          setConfirmRevoke({
+                            kind: "user",
+                            id: item.id,
+                            label: item.name,
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Apagar
+                      </button>
                       <button className="secondary-button" type="button" onClick={() => startUserEdit(item)}>
                         <Pencil size={14} /> Editar
                       </button>
@@ -551,20 +551,6 @@ export function UsersPage({
                         }}
                       >
                         <i /> {item.status === "active" ? "Ativo" : "Inativo"}
-                      </button>
-                      <button
-                        className="danger-text-button"
-                        type="button"
-                        disabled={item.id === currentUserId}
-                        onClick={() =>
-                          setConfirmRevoke({
-                            kind: "user",
-                            id: item.id,
-                            label: item.name,
-                          })
-                        }
-                      >
-                        <Trash2 size={14} /> Excluir acesso
                       </button>
                     </div>
                   </td>
@@ -784,10 +770,10 @@ export function UsersPage({
                 <Trash2 size={20} />
               </div>
               <div>
-                <h3>Excluir acesso</h3>
+                <h3>Apagar cadastro</h3>
                 <p className="modal-lead">
                   {confirmRevoke.kind === "user"
-                    ? `${confirmRevoke.label} deixa de entrar no ROM Flow. O e-mail fica livre para um novo convite; o histórico de solicitações permanece.`
+                    ? `${confirmRevoke.label} sai de todos os negócios. O e-mail fica livre para um novo convite; o histórico de solicitações permanece.`
                     : `O convite de ${confirmRevoke.label} será cancelado.`}
                 </p>
               </div>
@@ -804,7 +790,7 @@ export function UsersPage({
               </button>
               <button className="danger-button" type="button" disabled={revoking} onClick={() => void handleRevoke()}>
                 {revoking ? <span className="spinner" /> : null}
-                {revoking ? "Excluindo..." : "Excluir acesso"}
+                {revoking ? "Apagando..." : "Apagar de todos os negócios"}
               </button>
             </footer>
           </div>
