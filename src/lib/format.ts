@@ -167,6 +167,7 @@ export const AUDIT_LABEL: Record<AuditAction, string> = {
   UPDATE_USER: "Atualizou acesso de usuário",
   TOGGLE_USER: "Alterou status de usuário",
   REVOKE_USER: "Excluiu acesso de usuário",
+  RESET_DIRECTORY: "Zerou cadastros de acesso",
   RESET_PASSWORD: "Redefiniu senha",
   CHANGE_PASSWORD: "Trocou a própria senha",
   TOGGLE_COMPANY: "Alterou status da empresa",

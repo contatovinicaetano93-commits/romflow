@@ -10,8 +10,8 @@ export async function POST(request: Request) {
     if (!body.userId) {
       return jsonError("Usuário não informado.");
     }
-    await revokeUserAccessRecord(user, body.userId);
-    return jsonOk({ ok: true });
+    const revoked = await revokeUserAccessRecord(user, body.userId);
+    return jsonOk({ ok: true, user: revoked.user, releasedEmail: revoked.releasedEmail });
   } catch (caught) {
     const message = publicError(caught);
     return jsonError(message, message === "Sessão expirada." ? 401 : 400);

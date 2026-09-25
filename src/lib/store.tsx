@@ -7,10 +7,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { canAccessCompany } from "./access";
+import { isTombstoneEmail } from "./user-directory";
 import type {
   Category,
   Company,
@@ -25,6 +27,22 @@ import type {
 } from "./types";
 
 export type { FinanceAction, FinanceActionPayload };
+
+type CompanyWorkset = {
+  expenses: Expense[];
+  users: User[];
+};
+
+type OpsSnapshot = {
+  auditLogs: Database["auditLogs"];
+  emailLogs: Database["emailLogs"];
+};
+
+type SessionPayload = {
+  user: User | null;
+  needsSetup: boolean;
+  snapshot?: Database | null;
+};
 
 const EMPTY_DB: Database = {
   revision: 1,
@@ -101,20 +119,52 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
+function mergeUsers(current: User[], incoming: User[]): User[] {
+  if (incoming.length === 0) {
+    return current;
+  }
+  const next = new Map(current.map((item) => [item.id, item]));
+  for (const user of incoming) {
+    next.set(user.id, user);
+  }
+  return [...next.values()];
+}
+
+function patchUser(current: Database, user: User, releasedEmail?: string): Database {
+  const emailToDrop = (releasedEmail ?? (isTombstoneEmail(user.email) ? "" : user.email))
+    .trim()
+    .toLowerCase();
+  const nextUser = isTombstoneEmail(user.email) ? { ...user, companyIds: [], areaIds: [] } : user;
+  return {
+    ...current,
+    users: current.users.some((item) => item.id === nextUser.id)
+      ? current.users.map((item) => (item.id === nextUser.id ? nextUser : item))
+      : [...current.users, nextUser],
+    invitations: emailToDrop
+      ? current.invitations.filter(
+          (item) => item.accepted || item.email.trim().toLowerCase() !== emailToDrop,
+        )
+      : current.invitations,
+  };
+}
+
 type StoreValue = {
   ready: boolean;
   needsSetup: boolean;
   db: Database;
   user: User | null;
   company: Company | null;
+  pickerInbox: Expense[];
+  workingCompanyId: string | null;
   login: (email: string, password: string) => Promise<User>;
   bootstrapAdmin: (name: string, email: string, password: string) => Promise<User>;
   requestPasswordReset: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, nextPassword: string) => Promise<void>;
   logout: () => Promise<void>;
-  selectCompany: (id: string) => void;
+  selectCompany: (id: string) => Promise<void>;
   switchCompany: () => void;
   reload: () => Promise<void>;
+  loadOps: () => Promise<void>;
   accessibleCompanies: () => Company[];
   companyExpenses: (companyId?: string) => Expense[];
   createExpense: (expense: Omit<Expense, "id" | "created" | "updated">) => Promise<Expense>;
@@ -133,6 +183,7 @@ type StoreValue = {
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
   revokeUserAccess: (userId: string) => Promise<void>;
+  resetAccessDirectory: () => Promise<number>;
   cancelInvitation: (invitationId: string) => Promise<void>;
   updateUserAccess: (
     userId: string,
@@ -158,31 +209,24 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
-function applySnapshot(snapshot: Database | null | undefined, setDb: (next: Database) => void): boolean {
-  if (snapshot) {
-    setDb(snapshot);
-    return true;
-  }
-  if (snapshot === null) {
-    setDb(EMPTY_DB);
-    return true;
-  }
-  return false;
-}
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [db, setDb] = useState<Database>(EMPTY_DB);
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [pickerInbox, setPickerInbox] = useState<Expense[]>([]);
+  const [workingCompanyId, setWorkingCompanyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const selectSeq = useRef(0);
 
   useEffect(() => {
     onUnauthorized = () => {
       setUser(null);
       syncSentryUser(null);
       setCompany(null);
+      setWorkingCompanyId(null);
+      setPickerInbox([]);
       setDb(EMPTY_DB);
       setNotice("Sessão expirada. Entre de novo.");
     };
@@ -191,14 +235,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const refreshData = useCallback(async (nextUser?: User | null) => {
+  const applyBootstrap = useCallback((snapshot: Database | null | undefined): boolean => {
+    if (snapshot) {
+      setPickerInbox(snapshot.expenses);
+      setDb((current) => ({
+        revision: snapshot.revision,
+        companies: snapshot.companies,
+        categories: snapshot.categories,
+        users: snapshot.users,
+        invitations: snapshot.invitations,
+        expenses: current.expenses,
+        auditLogs: current.auditLogs,
+        emailLogs: current.emailLogs,
+      }));
+      return true;
+    }
+    if (snapshot === null) {
+      setPickerInbox([]);
+      setDb(EMPTY_DB);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const refreshDirectory = useCallback(async (nextUser?: User | null) => {
     const active = nextUser === undefined ? user : nextUser;
     if (!active) {
+      setPickerInbox([]);
       setDb(EMPTY_DB);
       return;
     }
-    const snapshot = await api<Database>("/api/data");
-    setDb(snapshot);
+    const snapshot = await api<Database>("/api/data?scope=bootstrap");
+    applyBootstrap(snapshot);
+  }, [applyBootstrap, user]);
+
+  const refreshCompany = useCallback(async (companyId: string) => {
+    const data = await api<CompanyWorkset>(
+      `/api/data?scope=company&companyId=${encodeURIComponent(companyId)}`,
+    );
+    setDb((current) => ({
+      ...current,
+      expenses: data.expenses,
+      users: mergeUsers(current.users, data.users),
+    }));
+    setWorkingCompanyId(companyId);
+  }, []);
+
+  const loadOps = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+    const data = await api<OpsSnapshot>("/api/data?scope=ops");
+    setDb((current) => ({
+      ...current,
+      auditLogs: data.auditLogs,
+      emailLogs: data.emailLogs,
+    }));
   }, [user]);
 
   const settleUser = useCallback(
@@ -206,68 +298,90 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       syncSentryUser(nextUser);
       setCompany(null);
+      setWorkingCompanyId(null);
       setNeedsSetup(false);
-      if (applySnapshot(snapshot, setDb)) {
+      if (applyBootstrap(snapshot)) {
         return;
       }
       try {
-        await refreshData(nextUser);
+        await refreshDirectory(nextUser);
       } catch {
+        setPickerInbox([]);
         setDb(EMPTY_DB);
       }
     },
-    [refreshData],
+    [applyBootstrap, refreshDirectory],
   );
 
   const reload = useCallback(async () => {
-    const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
-      "/api/auth/session",
-    );
+    const session = await api<SessionPayload>("/api/auth/session");
     setNeedsSetup(session.needsSetup);
     setUser(session.user);
     syncSentryUser(session.user);
     if (!session.user) {
       setCompany(null);
+      setWorkingCompanyId(null);
+      setPickerInbox([]);
       setDb(EMPTY_DB);
       return;
     }
-    if (company && !canAccessCompany(session.user, company.id)) {
+    const currentCompany = company;
+    if (currentCompany && !canAccessCompany(session.user, currentCompany.id)) {
       setCompany(null);
+      setWorkingCompanyId(null);
     }
-    if (applySnapshot(session.snapshot, setDb)) {
-      return;
+    if (!applyBootstrap(session.snapshot)) {
+      try {
+        await refreshDirectory(session.user);
+      } catch {
+        setPickerInbox([]);
+        setDb(EMPTY_DB);
+      }
+    }
+    const nextCompany =
+      currentCompany && canAccessCompany(session.user, currentCompany.id) ? currentCompany : null;
+    if (nextCompany) {
+      try {
+        await refreshCompany(nextCompany.id);
+      } catch {
+        setWorkingCompanyId(nextCompany.id);
+      }
     }
     try {
-      await refreshData(session.user);
+      const data = await api<OpsSnapshot>("/api/data?scope=ops");
+      setDb((current) => ({
+        ...current,
+        auditLogs: data.auditLogs,
+        emailLogs: data.emailLogs,
+      }));
     } catch {
-      setDb(EMPTY_DB);
+      return;
     }
-  }, [company, refreshData]);
+  }, [applyBootstrap, company, refreshCompany, refreshDirectory]);
 
   useEffect(() => {
     let cancelled = false;
     async function boot() {
       try {
-        const session = await api<{ user: User | null; needsSetup: boolean; snapshot?: Database | null }>(
-          "/api/auth/session",
-        );
+        const session = await api<SessionPayload>("/api/auth/session");
         if (cancelled) {
           return;
         }
         setNeedsSetup(session.needsSetup);
         setUser(session.user);
         syncSentryUser(session.user);
-        if (applySnapshot(session.snapshot, setDb)) {
+        if (applyBootstrap(session.snapshot)) {
           return;
         }
         if (session.user) {
           try {
-            const snapshot = await api<Database>("/api/data");
+            const snapshot = await api<Database>("/api/data?scope=bootstrap");
             if (!cancelled) {
-              setDb(snapshot);
+              applyBootstrap(snapshot);
             }
           } catch {
             if (!cancelled) {
+              setPickerInbox([]);
               setDb(EMPTY_DB);
             }
           }
@@ -276,17 +390,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setUser(null);
           syncSentryUser(null);
+          setPickerInbox([]);
           setDb(EMPTY_DB);
         }
       } finally {
-        setReady(true);
+        if (!cancelled) {
+          setReady(true);
+        }
       }
     }
     void boot();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyBootstrap]);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api<{ user: User; snapshot?: Database | null }>("/api/auth/login", {
@@ -325,11 +442,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUser(null);
     syncSentryUser(null);
     setCompany(null);
+    setWorkingCompanyId(null);
+    setPickerInbox([]);
     setDb(EMPTY_DB);
   }, []);
 
   const selectCompany = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (!user || !canAccessCompany(user, id)) {
         return;
       }
@@ -337,7 +456,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!next?.is_active) {
         return;
       }
+      const seq = ++selectSeq.current;
       setCompany(next);
+      try {
+        const data = await api<CompanyWorkset>(
+          `/api/data?scope=company&companyId=${encodeURIComponent(id)}`,
+        );
+        if (seq !== selectSeq.current) {
+          return;
+        }
+        setDb((current) => ({
+          ...current,
+          expenses: data.expenses,
+          users: mergeUsers(current.users, data.users),
+        }));
+        setWorkingCompanyId(id);
+      } catch (caught) {
+        if (seq !== selectSeq.current) {
+          return;
+        }
+        setWorkingCompanyId(id);
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
+        );
+      }
     },
     [db.companies, user],
   );
@@ -380,10 +522,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } else {
         setNotice(null);
       }
-      await refreshData();
+      setDb((current) => ({
+        ...current,
+        expenses: [result.expense, ...current.expenses.filter((item) => item.id !== result.expense.id)],
+      }));
+      if (input.company) {
+        void refreshCompany(input.company).catch(() => undefined);
+      }
       return result.expense;
     },
-    [refreshData],
+    [refreshCompany],
   );
 
   const applyFinanceAction = useCallback(
@@ -404,29 +552,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
       }));
-      try {
-        await refreshData();
-      } catch {
-        return;
+      const companyId = result.expense.company;
+      if (companyId) {
+        void refreshCompany(companyId).catch(() => undefined);
       }
     },
-    [refreshData],
+    [refreshCompany],
   );
 
   const inviteUser = useCallback(
     async (email: string, role: Role, companyIds: string[], areaIds: string[]) => {
       const result = await api<{
         invitation: Invitation;
+        releasedUserId?: string | null;
         emailSent: boolean;
         emailError?: string;
       }>("/api/invitations", {
         method: "POST",
         body: JSON.stringify({ email, role, companyIds, areaIds }),
       });
-      await refreshData();
+      setDb((current) => ({
+        ...current,
+        users: result.releasedUserId
+          ? current.users.filter((item) => item.id !== result.releasedUserId)
+          : current.users,
+        invitations: [
+          result.invitation,
+          ...current.invitations.filter(
+            (item) =>
+              item.id !== result.invitation.id &&
+              item.email.trim().toLowerCase() !== result.invitation.email.trim().toLowerCase(),
+          ),
+        ],
+      }));
       return { ...result.invitation, emailSent: result.emailSent, emailError: result.emailError };
     },
-    [refreshData],
+    [],
   );
 
   const validateInvite = useCallback(async (token: string) => {
@@ -447,38 +608,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [settleUser],
   );
 
-  const toggleUserStatus = useCallback(
-    async (userId: string) => {
-      await api("/api/users/toggle", {
-        method: "POST",
-        body: JSON.stringify({ userId }),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const toggleUserStatus = useCallback(async (userId: string) => {
+    const result = await api<{ user: User }>("/api/users/toggle", {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+    setDb((current) => patchUser(current, result.user));
+  }, []);
 
-  const revokeUserAccess = useCallback(
-    async (userId: string) => {
-      await api("/api/users/revoke", {
-        method: "POST",
-        body: JSON.stringify({ userId }),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const revokeUserAccess = useCallback(async (userId: string) => {
+    const result = await api<{ user: User; releasedEmail: string }>("/api/users/revoke", {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+    setDb((current) => patchUser(current, result.user, result.releasedEmail));
+  }, []);
 
-  const cancelInvitation = useCallback(
-    async (invitationId: string) => {
-      await api("/api/invitations/cancel", {
-        method: "POST",
-        body: JSON.stringify({ invitationId }),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const resetAccessDirectory = useCallback(async () => {
+    const result = await api<{ users: User[]; removed: number; invitations: Invitation[] }>(
+      "/api/users/reset-directory",
+      { method: "POST" },
+    );
+    setDb((current) => ({
+      ...current,
+      users: result.users,
+      invitations: result.invitations ?? [],
+    }));
+    return result.removed;
+  }, []);
+
+  const cancelInvitation = useCallback(async (invitationId: string) => {
+    await api("/api/invitations/cancel", {
+      method: "POST",
+      body: JSON.stringify({ invitationId }),
+    });
+    setDb((current) => ({
+      ...current,
+      invitations: current.invitations.filter((item) => item.id !== invitationId),
+    }));
+  }, []);
 
   const updateUserAccess = useCallback(
     async (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => {
@@ -493,20 +661,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           current && canAccessCompany(result.user, current.id) ? current : null,
         );
       }
-      await refreshData(user?.id === userId ? result.user : undefined);
+      setDb((current) => patchUser(current, result.user));
     },
-    [refreshData, user],
+    [user],
   );
 
   const updateInvitationAccess = useCallback(
     async (invitationId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => {
-      await api("/api/invitations", {
+      const result = await api<{ invitation: Invitation }>("/api/invitations", {
         method: "PATCH",
         body: JSON.stringify({ invitationId, role, companyIds, areaIds }),
       });
-      await refreshData();
+      setDb((current) => ({
+        ...current,
+        invitations: current.invitations.map((item) =>
+          item.id === result.invitation.id ? result.invitation : item,
+        ),
+      }));
     },
-    [refreshData],
+    [],
   );
 
   const createCompany = useCallback(
@@ -520,44 +693,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? { ...current, companyIds: [...current.companyIds, result.company.id] }
           : current,
       );
+      setDb((current) => ({
+        ...current,
+        companies: [...current.companies.filter((item) => item.id !== result.company.id), result.company],
+      }));
       setCompany(result.company);
-      await refreshData();
+      void refreshCompany(result.company.id).catch(() => {
+        setWorkingCompanyId(result.company.id);
+      });
     },
-    [refreshData],
+    [refreshCompany],
   );
 
-  const updateCompanyStatus = useCallback(
-    async (companyId: string, isActive: boolean) => {
-      await api("/api/companies", {
-        method: "PATCH",
-        body: JSON.stringify({ companyId, isActive }),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const updateCompanyStatus = useCallback(async (companyId: string, isActive: boolean) => {
+    await api("/api/companies", {
+      method: "PATCH",
+      body: JSON.stringify({ companyId, isActive }),
+    });
+    setDb((current) => ({
+      ...current,
+      companies: current.companies.map((item) =>
+        item.id === companyId ? { ...item, is_active: isActive } : item,
+      ),
+    }));
+    setCompany((current) =>
+      current?.id === companyId ? { ...current, is_active: isActive } : current,
+    );
+  }, []);
 
-  const createCategory = useCallback(
-    async (input: { name: string; color: string }) => {
-      await api("/api/categories", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const createCategory = useCallback(async (input: { name: string; color: string }) => {
+    const result = await api<{ category: Category }>("/api/categories", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    setDb((current) => ({
+      ...current,
+      categories: [...current.categories, result.category],
+    }));
+  }, []);
 
-  const updateCategory = useCallback(
-    async (id: string, patch: Partial<Category>) => {
-      await api("/api/categories", {
-        method: "PATCH",
-        body: JSON.stringify({ id, patch }),
-      });
-      await refreshData();
-    },
-    [refreshData],
-  );
+  const updateCategory = useCallback(async (id: string, patch: Partial<Category>) => {
+    const result = await api<{ category: Category }>("/api/categories", {
+      method: "PATCH",
+      body: JSON.stringify({ id, patch }),
+    });
+    setDb((current) => ({
+      ...current,
+      categories: current.categories.map((item) => (item.id === result.category.id ? result.category : item)),
+      expenses:
+        patch.name && patch.name !== current.categories.find((item) => item.id === id)?.name
+          ? current.expenses.map((item) =>
+              item.category === current.categories.find((category) => category.id === id)?.name
+                ? { ...item, category: result.category.name }
+                : item,
+            )
+          : current.expenses,
+    }));
+  }, []);
 
   const findUser = useCallback((id: string) => db.users.find((item) => item.id === id), [db.users]);
   const findCompany = useCallback(
@@ -575,6 +767,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       db,
       user,
       company,
+      pickerInbox,
+      workingCompanyId,
       login,
       bootstrapAdmin,
       requestPasswordReset,
@@ -583,6 +777,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       selectCompany,
       switchCompany,
       reload,
+      loadOps,
       accessibleCompanies,
       companyExpenses,
       createExpense,
@@ -592,6 +787,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       acceptInvite,
       toggleUserStatus,
       revokeUserAccess,
+      resetAccessDirectory,
       cancelInvitation,
       updateUserAccess,
       updateInvitationAccess,
@@ -621,15 +817,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       findCompany,
       findUser,
       inviteUser,
+      loadOps,
       login,
       logout,
       needsSetup,
       notice,
+      pickerInbox,
       ready,
       selectCompany,
       switchCompany,
       reload,
       requestPasswordReset,
+      resetAccessDirectory,
       revokeUserAccess,
       toggleUserStatus,
       updateCategory,
@@ -638,6 +837,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateUserAccess,
       user,
       validateInvite,
+      workingCompanyId,
     ],
   );
 

@@ -10,8 +10,8 @@ export async function POST(request: Request) {
     if (!body.userId) {
       return jsonError("Usuário não informado.");
     }
-    await toggleUserStatusRecord(user, body.userId);
-    return jsonOk({ ok: true });
+    const updated = await toggleUserStatusRecord(user, body.userId);
+    return jsonOk({ ok: true, user: updated });
   } catch (caught) {
     const message = publicError(caught);
     return jsonError(message, message === "Sessão expirada." ? 401 : 400);

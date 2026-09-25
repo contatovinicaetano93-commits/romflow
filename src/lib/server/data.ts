@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/schema";
 import type {
   AuditAction,
+  AuditLog,
   Category,
   Company,
   Database,
@@ -39,7 +40,9 @@ import {
   canSeeExpense,
   defaultAreasForRole,
   initialStatus,
+  isAdminInbox,
   isMaster,
+  isSolicitanteInbox,
   nextStatus,
   parseArea,
   parseAreas,
@@ -52,6 +55,11 @@ import {
 import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
 import { assertPassword, bumpSessionVersion, createSession, hashPassword, loadUser, userCount, verifyPassword } from "@/lib/server/session";
+import {
+  isProtectedDirectoryUser,
+  isTombstoneEmail,
+  tombstoneEmailFor,
+} from "@/lib/user-directory";
 
 export type FinanceAction = RequestAction;
 
@@ -346,49 +354,218 @@ function usersForSnapshot(actor: User, allUsers: User[], visibleExpenses: Expens
   return allUsers.filter((item) => ids.has(item.id));
 }
 
-export async function getSnapshot(actor: User): Promise<Database> {
-  const db = getDb();
-  const companyRows = await db.select().from(companies);
-  const categoryRows = await db.select().from(categories);
-  const expenseRows = await db.select().from(expenses).orderBy(desc(expenses.created));
-  const allUsers = actor.role === "solicitante" ? [actor] : await loadAllUsers();
-  const allInvites = isMaster(actor.role) ? await loadInvitations() : [];
-  const logs = isMaster(actor.role)
-    ? await db.select().from(auditLogs).orderBy(desc(auditLogs.created))
-    : [];
+const INBOX_STATUSES = [
+  "em_analise",
+  "devolvido",
+  "aprovada",
+  "recusada",
+  "aberta",
+  "em_andamento",
+  "finalizada",
+] as const;
 
-  const visibleCompanies = isMaster(actor.role)
-    ? companyRows
-    : companyRows.filter((item) => actor.companyIds.includes(item.id));
+const INBOX_PER_COMPANY = 8;
 
-  const visibleExpenses = expenseRows
-    .map(mapExpense)
-    .filter((item) => canSeeExpense(actor, item));
-
-  const visibleUsers = usersForSnapshot(actor, allUsers, visibleExpenses);
-
-  const mailRows = isMaster(actor.role)
-    ? await db.select().from(emailLogs).orderBy(desc(emailLogs.created))
-    : [];
-
+export function emptySnapshot(): Database {
   return {
     revision: 1,
-    companies: visibleCompanies.map(mapCompany),
+    companies: [],
+    categories: [],
+    users: [],
+    invitations: [],
+    expenses: [],
+    auditLogs: [],
+    emailLogs: [],
+  };
+}
+
+function mapAuditLog(item: typeof auditLogs.$inferSelect): AuditLog {
+  return {
+    id: item.id,
+    user: item.userId,
+    action: item.action as AuditAction,
+    resource: item.resource,
+    before: item.before,
+    after: item.after,
+    created: item.created,
+  };
+}
+
+function mapInboxExpense(row: {
+  id: string;
+  title: string;
+  area: string;
+  status: string;
+  companyId: string;
+  requesterId: string;
+  created: string;
+}): Expense {
+  return {
+    id: row.id,
+    title: row.title,
+    description: "",
+    area: parseArea(row.area),
+    expense_type: "outros",
+    event_project: "",
+    event_date: "",
+    amount: 0,
+    category: "",
+    payment_method: "pix",
+    beneficiary_name: "",
+    beneficiary_document: "",
+    pix_key: "",
+    bank_name: "",
+    agency: "",
+    account: "",
+    boleto_code: "",
+    max_payment_date: "",
+    payment_date_justification: "",
+    receipt_justification: "",
+    receipt: null,
+    payment_proof: null,
+    company: row.companyId,
+    requester: row.requesterId,
+    approver: null,
+    status: parseStatus(row.status),
+    scheduled_date: null,
+    review_note: "",
+    created: row.created,
+    updated: row.created,
+  };
+}
+
+function visibleCompaniesFor(actor: User, companyRows: Array<typeof companies.$inferSelect>) {
+  return isMaster(actor.role)
+    ? companyRows
+    : companyRows.filter((item) => actor.companyIds.includes(item.id));
+}
+
+async function loadInboxExpenses(actor: User): Promise<Expense[]> {
+  const filters = [inArray(expenses.status, [...INBOX_STATUSES])];
+  if (actor.role === "solicitante") {
+    filters.push(eq(expenses.requesterId, actor.id));
+  } else if (!isMaster(actor.role) && actor.companyIds.length > 0) {
+    filters.push(inArray(expenses.companyId, actor.companyIds));
+  } else if (!isMaster(actor.role)) {
+    return [];
+  }
+  const rows = await getDb()
+    .select({
+      id: expenses.id,
+      title: expenses.title,
+      area: expenses.area,
+      status: expenses.status,
+      companyId: expenses.companyId,
+      requesterId: expenses.requesterId,
+      created: expenses.created,
+    })
+    .from(expenses)
+    .where(and(...filters))
+    .orderBy(desc(expenses.created));
+  const counts = new Map<string, number>();
+  const inbox: Expense[] = [];
+  for (const row of rows) {
+    const expense = mapInboxExpense(row);
+    if (!canSeeExpense(actor, expense)) {
+      continue;
+    }
+    const relevant =
+      actor.role === "solicitante" ? isSolicitanteInbox(expense) : isAdminInbox(expense);
+    if (!relevant) {
+      continue;
+    }
+    const count = counts.get(expense.company) ?? 0;
+    if (count >= INBOX_PER_COMPANY) {
+      continue;
+    }
+    counts.set(expense.company, count + 1);
+    inbox.push(expense);
+  }
+  return inbox;
+}
+
+export type CompanyWorkset = {
+  expenses: Expense[];
+  users: User[];
+};
+
+export type OpsSnapshot = {
+  auditLogs: AuditLog[];
+  emailLogs: EmailLog[];
+};
+
+export async function getBootstrapSnapshot(actor: User): Promise<Database> {
+  const db = getDb();
+  const [companyRows, categoryRows, allUsers, allInvites, inbox] = await Promise.all([
+    db.select().from(companies),
+    db.select().from(categories),
+    actor.role === "solicitante" ? Promise.resolve([actor]) : loadAllUsers(),
+    isMaster(actor.role) ? loadInvitations() : Promise.resolve([] as Invitation[]),
+    loadInboxExpenses(actor),
+  ]);
+  return {
+    revision: 1,
+    companies: visibleCompaniesFor(actor, companyRows).map(mapCompany),
     categories: categoryRows.map(mapCategory),
-    users: visibleUsers,
+    users: usersForSnapshot(actor, allUsers, inbox),
     invitations: allInvites,
-    expenses: visibleExpenses,
-    auditLogs: logs.map((item) => ({
-      id: item.id,
-      user: item.userId,
-      action: item.action as AuditAction,
-      resource: item.resource,
-      before: item.before,
-      after: item.after,
-      created: item.created,
-    })),
+    expenses: inbox,
+    auditLogs: [],
+    emailLogs: [],
+  };
+}
+
+export async function getCompanyWorkset(actor: User, companyId: string): Promise<CompanyWorkset> {
+  if (!canAccessCompany(actor, companyId)) {
+    throw new Error("Você não tem acesso a esta empresa.");
+  }
+  const db = getDb();
+  const expenseRows = await db
+    .select()
+    .from(expenses)
+    .where(eq(expenses.companyId, companyId))
+    .orderBy(desc(expenses.created));
+  const visibleExpenses = expenseRows.map(mapExpense).filter((item) => canSeeExpense(actor, item));
+  if (actor.role === "solicitante") {
+    return { expenses: visibleExpenses, users: [actor] };
+  }
+  if (isMaster(actor.role)) {
+    return { expenses: visibleExpenses, users: [] };
+  }
+  const allUsers = await loadAllUsers();
+  return { expenses: visibleExpenses, users: usersForSnapshot(actor, allUsers, visibleExpenses) };
+}
+
+export async function getOpsSnapshot(actor: User): Promise<OpsSnapshot> {
+  if (!isMaster(actor.role)) {
+    return { auditLogs: [], emailLogs: [] };
+  }
+  const db = getDb();
+  const [logs, mailRows] = await Promise.all([
+    db.select().from(auditLogs).orderBy(desc(auditLogs.created)),
+    db.select().from(emailLogs).orderBy(desc(emailLogs.created)),
+  ]);
+  return {
+    auditLogs: logs.map(mapAuditLog),
     emailLogs: mailRows.map(mapEmailLog),
   };
+}
+
+export async function getSnapshot(actor: User): Promise<Database> {
+  const [boot, ops] = await Promise.all([getBootstrapSnapshot(actor), getOpsSnapshot(actor)]);
+  return {
+    ...boot,
+    auditLogs: ops.auditLogs,
+    emailLogs: ops.emailLogs,
+  };
+}
+
+export async function getBootstrapSnapshotSafe(actor: User): Promise<Database | null> {
+  try {
+    return await getBootstrapSnapshot(actor);
+  } catch {
+    return null;
+  }
 }
 
 export async function getSnapshotSafe(actor: User): Promise<Database | null> {
@@ -401,7 +578,7 @@ export async function getSnapshotSafe(actor: User): Promise<Database | null> {
 
 export async function loginWithPassword(email: string, password: string): Promise<User> {
   const row = await findUserRowByEmail(email);
-  if (!row || !(await verifyPassword(password, row.passwordHash))) {
+  if (!row || !(await verifyPassword(password, row.passwordHash)) || isTombstoneEmail(row.email)) {
     throw new Error("E-mail ou senha incorretos.");
   }
   if (row.status !== "active") {
@@ -623,13 +800,38 @@ export async function applyFinanceActionRecord(
   return updated;
 }
 
+async function cancelPendingInvitesForEmail(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  await getDb()
+    .delete(invitations)
+    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)));
+}
+
+async function tombstoneUserRow(row: typeof users.$inferSelect): Promise<string> {
+  const nextEmail = tombstoneEmailFor(row.id);
+  const db = getDb();
+  await db
+    .update(users)
+    .set({
+      status: "inactive",
+      email: nextEmail,
+    })
+    .where(eq(users.id, row.id));
+  await replaceUserCompanies(row.id, []);
+  await replaceUserAreas(row.id, []);
+  await bumpSessionVersion(row.id);
+  await db.delete(passwordResets).where(eq(passwordResets.userId, row.id));
+  await cancelPendingInvitesForEmail(row.email);
+  return nextEmail;
+}
+
 export async function createInvitationRecord(
   actor: User,
   email: string,
   role: Role,
   companyIds: string[],
   areaIds: RequestArea[],
-): Promise<Invitation> {
+): Promise<{ invitation: Invitation; releasedUserId: string | null }> {
   if (!isMaster(actor.role)) {
     throw new Error("Apenas o master pode criar acessos.");
   }
@@ -639,17 +841,15 @@ export async function createInvitationRecord(
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const existingUser = await findUserRowByEmail(normalized);
-  if (existingUser?.status === "active") {
-    throw new Error("Já existe um usuário ativo com este e-mail.");
+  let releasedUserId: string | null = null;
+  if (existingUser) {
+    if (existingUser.status === "active" && !isTombstoneEmail(existingUser.email)) {
+      throw new Error("Já existe um usuário ativo com este e-mail.");
+    }
+    await tombstoneUserRow(existingUser);
+    releasedUserId = existingUser.id;
   }
-  const [existingInvite] = await db
-    .select()
-    .from(invitations)
-    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)))
-    .limit(1);
-  if (existingInvite) {
-    throw new Error("Já existe um convite pendente para este e-mail.");
-  }
+  await cancelPendingInvitesForEmail(normalized);
   const invitation: Invitation = {
     id: uid("inv"),
     email: email.trim().toLowerCase(),
@@ -682,7 +882,7 @@ export async function createInvitationRecord(
   }
   await replaceInvitationAreas(invitation.id, resolvedAreas);
   await writeAudit(actor.id, "CREATE_INVITE", invitation.id, "—", invitation.email);
-  return invitation;
+  return { invitation, releasedUserId };
 }
 
 export async function getInvitationByToken(token: string): Promise<Invitation> {
@@ -887,14 +1087,7 @@ export async function updateInvitationAccessRecord(
   };
 }
 
-async function cancelPendingInvitesForEmail(email: string): Promise<void> {
-  const normalized = email.trim().toLowerCase();
-  await getDb()
-    .delete(invitations)
-    .where(and(sql`lower(${invitations.email}) = ${normalized}`, eq(invitations.accepted, false)));
-}
-
-export async function toggleUserStatusRecord(actor: User, userId: string): Promise<void> {
+export async function toggleUserStatusRecord(actor: User, userId: string): Promise<User> {
   if (actor.id === userId) {
     throw new Error("Você não pode desativar o próprio acesso.");
   }
@@ -912,12 +1105,20 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   await db.update(users).set({ status: nextStatus }).where(eq(users.id, userId));
   if (nextStatus === "inactive") {
     await bumpSessionVersion(userId);
+    await cancelPendingInvitesForEmail(row.email);
   }
-  await cancelPendingInvitesForEmail(row.email);
   await writeAudit(actor.id, "TOGGLE_USER", userId, row.status, nextStatus);
+  const updated = await loadUser(userId);
+  if (!updated) {
+    throw new Error("Usuário não encontrado.");
+  }
+  return updated;
 }
 
-export async function revokeUserAccessRecord(actor: User, userId: string): Promise<void> {
+export async function revokeUserAccessRecord(
+  actor: User,
+  userId: string,
+): Promise<{ user: User; releasedEmail: string }> {
   if (!isMaster(actor.role)) {
     throw new Error("Apenas o master pode excluir acessos.");
   }
@@ -934,10 +1135,44 @@ export async function revokeUserAccessRecord(actor: User, userId: string): Promi
       throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
-  await db.update(users).set({ status: "inactive" }).where(eq(users.id, userId));
-  await bumpSessionVersion(userId);
-  await cancelPendingInvitesForEmail(row.email);
-  await writeAudit(actor.id, "REVOKE_USER", userId, row.status, "inactive");
+  const releasedEmail = row.email;
+  await tombstoneUserRow(row);
+  await writeAudit(actor.id, "REVOKE_USER", userId, releasedEmail, "excluído");
+  const updated = await loadUser(userId);
+  if (!updated) {
+    throw new Error("Usuário não encontrado.");
+  }
+  return { user: updated, releasedEmail };
+}
+
+export async function resetAccessDirectoryRecord(
+  actor: User,
+): Promise<{ users: User[]; removed: number }> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode zerar os cadastros.");
+  }
+  const db = getDb();
+  const rows = await db.select().from(users);
+  let removed = 0;
+  for (const row of rows) {
+    if (isProtectedDirectoryUser(row, actor.id) || isTombstoneEmail(row.email)) {
+      continue;
+    }
+    if (parseRole(row.role) === "master" && (await countOtherActiveMasters(row.id)) === 0) {
+      continue;
+    }
+    await tombstoneUserRow(row);
+    removed += 1;
+  }
+  await db.delete(invitations);
+  await writeAudit(
+    actor.id,
+    "RESET_DIRECTORY",
+    "users",
+    String(rows.length),
+    `mantidos ${rows.length - removed}; removidos ${removed}`,
+  );
+  return { users: await loadAllUsers(), removed };
 }
 
 export async function cancelInvitationRecord(actor: User, invitationId: string): Promise<void> {
@@ -1093,7 +1328,7 @@ export async function requestPasswordReset(
   email: string,
 ): Promise<{ id: string; userId: string; token: string; name: string; email: string } | null> {
   const row = await findUserRowByEmail(email);
-  if (!row || row.status !== "active") {
+  if (!row || row.status !== "active" || isTombstoneEmail(row.email)) {
     return null;
   }
   const token = inviteToken();
