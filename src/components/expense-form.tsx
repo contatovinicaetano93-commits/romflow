@@ -670,14 +670,14 @@ export function ExpenseForm({
         {error ? <div className="form-error" style={{ margin: "0 24px 16px" }}>{error}</div> : null}
         <div className="form-footer">
           <span>Etapa {step + 1} de 4 • Ambiente corporativo protegido</span>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="form-footer-actions">
             {step > 0 ? (
               <button
                 type="button"
                 className="secondary-button"
                 onClick={() => setStep((current) => current - 1)}
               >
-                Cancelar
+                Voltar
               </button>
             ) : (
               <button type="button" className="secondary-button" onClick={onCancel}>

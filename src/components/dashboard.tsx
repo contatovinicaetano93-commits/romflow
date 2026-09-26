@@ -76,7 +76,11 @@ export function Dashboard({
     ...item,
     value: expenses.filter((expense) => expense.category === item.category).reduce((sum, expense) => sum + expense.amount, 0),
   }));
-  const maxCategory = Math.max(...categoryStats.map((item) => item.value), 1);
+  const visibleCategoryStats = categoryStats
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+  const maxCategory = Math.max(...visibleCategoryStats.map((item) => item.value), 1);
 
   const kpis =
     role === "solicitante"
@@ -225,14 +229,14 @@ export function Dashboard({
               <p>Distribuição no período</p>
             </div>
           </header>
-          {isEmpty ? (
+          {isEmpty || visibleCategoryStats.length === 0 ? (
             <div className="empty-state">
               <strong>Nenhuma solicitação neste negócio.</strong>
               <span>As categorias aparecem quando houver solicitações.</span>
             </div>
           ) : (
             <div className="bar-chart">
-              {categoryStats.map((item) => (
+              {visibleCategoryStats.map((item) => (
                 <div key={item.category}>
                   <span className="bar-value">{item.value ? money(item.value) : "—"}</span>
                   <span className="bar-track">

@@ -228,45 +228,71 @@ export function ExpenseList({
               </div>
             ) : null}
             {otherItems.length > 0 ? (
-              <div className="expense-table-wrap">
-                <table className="expense-table">
-                  <thead>
-                    <tr>
-                      <th>Solicitação</th>
-                      <th>Área</th>
-                      <th>Valor</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {otherItems.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <button className="expense-main" type="button" onClick={() => onOpen(item)}>
-                            <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
-                            <span>
-                              <strong>{item.title}</strong>
-                              <small>
-                                #{shortId(item.id)}
-                                {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
-                              </small>
-                            </span>
-                          </button>
-                        </td>
-                        <td>
-                          <span className="table-subline">{AREA_LABEL[item.area]}</span>
-                        </td>
-                        <td className="amount-cell">{item.amount > 0 ? money(item.amount) : "—"}</td>
-                        <td>
-                          <button type="button" className="status-open" onClick={() => onOpen(item)}>
-                            <StatusBadge status={item.status} />
-                          </button>
-                        </td>
+              <>
+                <div className="expense-table-wrap desktop-table-only">
+                  <table className="expense-table">
+                    <thead>
+                      <tr>
+                        <th>Solicitação</th>
+                        <th>Área</th>
+                        <th>Valor</th>
+                        <th>Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {otherItems.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            <button className="expense-main" type="button" onClick={() => onOpen(item)}>
+                              <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
+                              <span>
+                                <strong>{item.title}</strong>
+                                <small>
+                                  #{shortId(item.id)}
+                                  {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
+                                </small>
+                              </span>
+                            </button>
+                          </td>
+                          <td>
+                            <span className="table-subline">{AREA_LABEL[item.area]}</span>
+                          </td>
+                          <td className="amount-cell">{item.amount > 0 ? money(item.amount) : "—"}</td>
+                          <td>
+                            <button type="button" className="status-open" onClick={() => onOpen(item)}>
+                              <StatusBadge status={item.status} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mobile-card-list">
+                  {otherItems.map((item) => (
+                    <article className="maintenance-ticket-card" key={item.id}>
+                      <div className="maintenance-ticket-head">
+                        <button type="button" className="expense-main" onClick={() => onOpen(item)}>
+                          <span className="category-icon">{AREA_LABEL[item.area].slice(0, 1)}</span>
+                          <span>
+                            <strong>{item.title}</strong>
+                            <small>
+                              #{shortId(item.id)}
+                              {item.area === "financeiro" ? ` • ${item.beneficiary_name}` : ""}
+                              {companyNames[item.company] ? ` • ${companyNames[item.company]}` : ""}
+                            </small>
+                          </span>
+                        </button>
+                        <StatusBadge status={item.status} />
+                      </div>
+                      <div className="mobile-request-meta">
+                        <span>{AREA_LABEL[item.area]}</span>
+                        <strong>{item.amount > 0 ? money(item.amount) : "—"}</strong>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
             ) : null}
           </div>
         )}
