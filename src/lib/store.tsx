@@ -275,9 +275,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [applyBootstrap, user]);
 
   const refreshCompany = useCallback(async (companyId: string) => {
+    const seq = selectSeq.current;
     const data = await api<CompanyWorkset>(
       `/api/data?scope=company&companyId=${encodeURIComponent(companyId)}`,
     );
+    if (seq !== selectSeq.current) {
+      return;
+    }
     setDb((current) => ({
       ...current,
       expenses: data.expenses,
@@ -305,6 +309,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCompany(null);
       setWorkingCompanyId(null);
       setNeedsSetup(false);
+      setNotice(null);
       if (applyBootstrap(snapshot)) {
         return;
       }
@@ -495,6 +500,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const switchCompany = useCallback(() => {
     setCompany(null);
+    setWorkingCompanyId(null);
   }, []);
 
   const accessibleCompanies = useCallback(() => {
@@ -535,6 +541,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: [result.expense, ...current.expenses.filter((item) => item.id !== result.expense.id)],
       }));
+      setPickerInbox((current) => [
+        result.expense,
+        ...current.filter((item) => item.id !== result.expense.id),
+      ]);
       if (input.company) {
         void refreshCompany(input.company).catch(() => undefined);
       }
@@ -561,6 +571,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
       }));
+      setPickerInbox((current) =>
+        current.map((item) => (item.id === result.expense.id ? result.expense : item)),
+      );
       const companyId = result.expense.company;
       if (companyId) {
         void refreshCompany(companyId).catch(() => undefined);
@@ -666,9 +679,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (user?.id === userId) {
         setUser(result.user);
         syncSentryUser(result.user);
-        setCompany((current) =>
-          current && canAccessCompany(result.user, current.id) ? current : null,
-        );
+        const currentCompany = companyRef.current;
+        if (!currentCompany || !canAccessCompany(result.user, currentCompany.id)) {
+          setCompany(null);
+          setWorkingCompanyId(null);
+        }
       }
       setDb((current) => patchUser(current, result.user));
     },
@@ -707,9 +722,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         companies: [...current.companies.filter((item) => item.id !== result.company.id), result.company],
       }));
       setCompany(result.company);
-      void refreshCompany(result.company.id).catch(() => {
-        setWorkingCompanyId(result.company.id);
-      });
+      try {
+        await refreshCompany(result.company.id);
+      } catch (caught) {
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
+        );
+      }
     },
     [refreshCompany],
   );

@@ -36,6 +36,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const [loginBanner, setLoginBanner] = useState("");
   const [reloading, setReloading] = useState(false);
   const [viewEpoch, setViewEpoch] = useState(0);
+  const [pickingCompany, setPickingCompany] = useState(false);
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
   const accessibleCompanies = store.accessibleCompanies();
@@ -122,7 +123,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   if (!store.user) {
     return (
       <LoginPage
-        banner={loginBanner}
+        banner={loginBanner || store.notice || ""}
         needsSetup={store.needsSetup}
         onBootstrap={async (name, email, password) => {
           await store.bootstrapAdmin(name, email, password);
@@ -147,7 +148,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   ) : null;
 
   if (!store.company) {
-    if (onlyCompanyId && !store.notice) {
+    if (onlyCompanyId && !store.notice && !pickingCompany) {
       return (
         <>
           {noticeBanner}
@@ -162,7 +163,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         </>
       );
     }
-    const adminWithoutCompany = isMaster(store.user.role) && isGroupAdminScreen(screen);
+    const adminWithoutCompany = isMaster(store.user.role) && isGroupAdminScreen(screen) && !pickingCompany;
     if (!adminWithoutCompany) {
       return (
         <>
@@ -172,11 +173,19 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             companies={accessibleCompanies}
             expenses={store.pickerInbox}
             onSelect={(id) => {
+              setPickingCompany(false);
               void store.selectCompany(id);
               setScreen(homeScreen(store.user?.role ?? "solicitante"));
             }}
             onLogout={store.logout}
-            onOpenSettings={isMaster(store.user.role) ? () => setScreen("settings") : undefined}
+            onOpenSettings={
+              isMaster(store.user.role)
+                ? () => {
+                    setPickingCompany(false);
+                    setScreen("settings");
+                  }
+                : undefined
+            }
           />
         </>
       );
@@ -370,6 +379,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         onNavigate={navigate}
         onSwitchCompany={() => {
           closePopovers();
+          setSelected(null);
+          setPickingCompany(true);
           store.switchCompany();
         }}
         onBack={() => {
@@ -379,6 +390,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             navigate(home);
             return;
           }
+          setSelected(null);
+          setPickingCompany(true);
           store.switchCompany();
         }}
         onReload={() => {

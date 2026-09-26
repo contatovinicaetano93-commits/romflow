@@ -1059,4 +1059,24 @@ body {
   border-color: #3f3f46;
 }
 
+.resubmit-payment-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resubmit-payment-fields .payment-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.resubmit-payment-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted, #a1a1aa);
+  font-size: 13px;
+}
+
 

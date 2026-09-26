@@ -49,6 +49,7 @@ import {
   parseArea,
   parseAreas,
   parseExpenseType,
+  parsePaymentMethod,
   parseRole,
   parseStatus,
   withEventDateObservation,
@@ -69,6 +70,14 @@ export type FinanceActionPayload = {
   note?: string;
   proof?: StoredFile | null;
   receipt?: StoredFile | null;
+  beneficiary_name?: string;
+  beneficiary_document?: string;
+  payment_method?: PaymentMethod;
+  pix_key?: string;
+  bank_name?: string;
+  agency?: string;
+  account?: string;
+  boleto_code?: string;
 };
 
 function mapCompany(row: typeof companies.$inferSelect): Company {
@@ -705,6 +714,54 @@ export async function createExpenseRecord(
   return expense;
 }
 
+function resubmitPaymentFields(
+  current: Expense,
+  payload: FinanceActionPayload | undefined,
+  receipt: Expense["receipt"],
+): Pick<
+  Expense,
+  | "beneficiary_name"
+  | "beneficiary_document"
+  | "payment_method"
+  | "pix_key"
+  | "bank_name"
+  | "agency"
+  | "account"
+  | "boleto_code"
+> {
+  if (current.area !== "financeiro") {
+    return {
+      beneficiary_name: current.beneficiary_name,
+      beneficiary_document: current.beneficiary_document,
+      payment_method: current.payment_method,
+      pix_key: current.pix_key,
+      bank_name: current.bank_name,
+      agency: current.agency,
+      account: current.account,
+      boleto_code: current.boleto_code,
+    };
+  }
+  const method = payload?.payment_method
+    ? parsePaymentMethod(payload.payment_method)
+    : current.payment_method;
+  const next = {
+    beneficiary_name: payload?.beneficiary_name ?? current.beneficiary_name,
+    beneficiary_document: payload?.beneficiary_document ?? current.beneficiary_document,
+    payment_method: method,
+    pix_key: method === "pix" ? (payload?.pix_key ?? current.pix_key) : "",
+    bank_name: method === "ted" ? (payload?.bank_name ?? current.bank_name) : "",
+    agency: method === "ted" ? (payload?.agency ?? current.agency) : "",
+    account: method === "ted" ? (payload?.account ?? current.account) : "",
+    boleto_code: method === "boleto" ? (payload?.boleto_code ?? current.boleto_code) : "",
+  };
+  assertExpenseCreate({
+    ...current,
+    ...next,
+    receipt,
+  });
+  return next;
+}
+
 export async function applyFinanceActionRecord(
   actor: User,
   expenseId: string,
@@ -723,6 +780,12 @@ export async function applyFinanceActionRecord(
   const permitted = allowedActions(actor, current);
   if (!permitted.includes(action)) {
     throw new Error("Sem permissão para esta ação.");
+  }
+  if (
+    (action === "approve" || action === "reject" || action === "docs") &&
+    current.requester === actor.id
+  ) {
+    throw new Error("Você não pode revisar a própria solicitação.");
   }
   if ((action === "reject" || action === "docs") && !payload?.note?.trim()) {
     throw new Error("Informe a justificativa.");
@@ -772,8 +835,10 @@ export async function applyFinanceActionRecord(
     current.payment_proof,
   );
   const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts", actor.id, current.receipt);
+  const paymentFields = action === "resubmit" ? resubmitPaymentFields(current, payload, receipt) : current;
   const updated: Expense = {
     ...current,
+    ...paymentFields,
     status,
     approver: nextApproverId(action, actor.id, current.approver),
     review_note: nextReviewNote(action, payload?.note, current.review_note),
@@ -789,6 +854,14 @@ export async function applyFinanceActionRecord(
       reviewNote: updated.review_note,
       paymentProof: updated.payment_proof,
       receipt: updated.receipt,
+      beneficiaryName: updated.beneficiary_name,
+      beneficiaryDocument: updated.beneficiary_document,
+      paymentMethod: updated.payment_method,
+      pixKey: updated.pix_key,
+      bankName: updated.bank_name,
+      agency: updated.agency,
+      account: updated.account,
+      boletoCode: updated.boleto_code,
       updated: updated.updated,
     })
     .where(and(eq(expenses.id, expenseId), eq(expenses.status, current.status)))
