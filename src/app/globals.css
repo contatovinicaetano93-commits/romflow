@@ -771,6 +771,18 @@ body {
     z-index: 50;
   }
 
+  .sidebar-security {
+    display: none;
+  }
+
+  .sidebar {
+    padding-bottom: 10px;
+  }
+
+  .side-nav {
+    padding-bottom: 20px;
+  }
+
   .kindness-banner {
     flex-direction: column;
     align-items: flex-start;
