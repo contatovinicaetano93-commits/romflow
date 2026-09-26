@@ -50,11 +50,11 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     Boolean(store.company) && store.workingCompanyId !== store.company?.id;
 
   useEffect(() => {
-    if (!store.user || currentCompanyId || !onlyCompanyId) {
+    if (!store.user || currentCompanyId || !onlyCompanyId || store.notice) {
       return;
     }
     void selectCompany(onlyCompanyId);
-  }, [currentCompanyId, onlyCompanyId, selectCompany, store.user]);
+  }, [currentCompanyId, onlyCompanyId, selectCompany, store.notice, store.user]);
 
   useEffect(() => {
     if (!currentCompanyId || !store.user) {
@@ -137,47 +137,65 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
     );
   }
 
+  const noticeBanner = store.notice ? (
+    <div className="app-notice" role="status">
+      <span>{store.notice}</span>
+      <button type="button" onClick={store.clearNotice}>
+        Fechar
+      </button>
+    </div>
+  ) : null;
+
   if (!store.company) {
-    if (onlyCompanyId) {
+    if (onlyCompanyId && !store.notice) {
       return (
-        <div className="login-page">
-          <section className="login-form-wrap">
-            <div className="login-form">
-              <span className="secure-label">ROM FLOW</span>
-              <h2>Abrindo sua empresa...</h2>
-            </div>
-          </section>
-        </div>
+        <>
+          {noticeBanner}
+          <div className="login-page">
+            <section className="login-form-wrap">
+              <div className="login-form">
+                <span className="secure-label">ROM FLOW</span>
+                <h2>Abrindo sua empresa...</h2>
+              </div>
+            </section>
+          </div>
+        </>
       );
     }
     const adminWithoutCompany = isMaster(store.user.role) && isGroupAdminScreen(screen);
     if (!adminWithoutCompany) {
       return (
-        <CompanySelect
-          user={store.user}
-          companies={accessibleCompanies}
-          expenses={store.pickerInbox}
-          onSelect={(id) => {
-            void store.selectCompany(id);
-            setScreen(homeScreen(store.user?.role ?? "solicitante"));
-          }}
-          onLogout={store.logout}
-          onOpenSettings={isMaster(store.user.role) ? () => setScreen("settings") : undefined}
-        />
+        <>
+          {noticeBanner}
+          <CompanySelect
+            user={store.user}
+            companies={accessibleCompanies}
+            expenses={store.pickerInbox}
+            onSelect={(id) => {
+              void store.selectCompany(id);
+              setScreen(homeScreen(store.user?.role ?? "solicitante"));
+            }}
+            onLogout={store.logout}
+            onOpenSettings={isMaster(store.user.role) ? () => setScreen("settings") : undefined}
+          />
+        </>
       );
     }
   }
 
   if (companyOpening && !(isMaster(store.user.role) && isGroupAdminScreen(screen))) {
     return (
-      <div className="login-page">
-        <section className="login-form-wrap">
-          <div className="login-form">
-            <span className="secure-label">ROM FLOW</span>
-            <h2>Abrindo {store.company?.name ?? "sua empresa"}...</h2>
-          </div>
-        </section>
-      </div>
+      <>
+        {noticeBanner}
+        <div className="login-page">
+          <section className="login-form-wrap">
+            <div className="login-form">
+              <span className="secure-label">ROM FLOW</span>
+              <h2>Abrindo {store.company?.name ?? "sua empresa"}...</h2>
+            </div>
+          </section>
+        </div>
+      </>
     );
   }
 
@@ -340,14 +358,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
 
   return (
     <>
-      {store.notice ? (
-        <div className="app-notice" role="status">
-          <span>{store.notice}</span>
-          <button type="button" onClick={store.clearNotice}>
-            Fechar
-          </button>
-        </div>
-      ) : null}
+      {noticeBanner}
       <AppShell
         role={store.user.role}
         company={store.company}

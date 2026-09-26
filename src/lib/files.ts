@@ -74,10 +74,6 @@ async function prepareUploadFile(file: File): Promise<File> {
   if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
     return compressImage(file);
   }
-  const dataUrl = await readDataUrl(file);
-  if (dataUrl.length > MAX_DATA_URL_CHARS) {
-    throw new Error("Este PDF está grande demais. Envie um arquivo de até 1 MB ou uma foto da nota.");
-  }
   return file;
 }
 

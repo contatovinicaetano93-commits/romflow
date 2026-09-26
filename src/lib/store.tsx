@@ -219,6 +219,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [workingCompanyId, setWorkingCompanyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const selectSeq = useRef(0);
+  const companyRef = useRef(company);
+
+  useEffect(() => {
+    companyRef.current = company;
+  }, [company]);
 
   useEffect(() => {
     onUnauthorized = () => {
@@ -456,7 +461,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!next?.is_active) {
         return;
       }
+      const previousCompany = companyRef.current;
       const seq = ++selectSeq.current;
+      setNotice(null);
       setCompany(next);
       try {
         const data = await api<CompanyWorkset>(
@@ -475,7 +482,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (seq !== selectSeq.current) {
           return;
         }
-        setWorkingCompanyId(id);
+        setCompany(previousCompany);
         setNotice(
           caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
         );

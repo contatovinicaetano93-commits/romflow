@@ -1027,4 +1027,36 @@ body {
   }
 }
 
+.payment-credentials {
+  margin: 10px 0 14px;
+}
+
+.payment-credentials .beneficiary-cell strong {
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+}
+
+.copy-credential {
+  align-self: flex-start;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border, #27272a);
+  background: transparent;
+  color: var(--muted, #a1a1aa);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.copy-credential:hover,
+.copy-credential:focus-visible {
+  color: var(--text, #fafafa);
+  border-color: #3f3f46;
+}
+
 
