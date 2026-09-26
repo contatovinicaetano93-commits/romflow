@@ -88,6 +88,14 @@ export type FinanceActionPayload = {
   note?: string;
   proof?: StoredFile | null;
   receipt?: StoredFile | null;
+  beneficiary_name?: string;
+  beneficiary_document?: string;
+  payment_method?: PaymentMethod;
+  pix_key?: string;
+  bank_name?: string;
+  agency?: string;
+  account?: string;
+  boleto_code?: string;
 };
 
 export type Company = {

@@ -23,12 +23,38 @@ import {
   formatDateTime,
   money,
 } from "@/lib/format";
-import type { Expense, FinanceAction, FinanceActionPayload, User } from "@/lib/types";
+import type { Expense, FinanceAction, FinanceActionPayload, PaymentMethod, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 import { fileHref, fileToStored } from "@/lib/files";
 import { allowedActions } from "@/lib/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { StatusBadge } from "./status-badge";
+
+type PayDraft = {
+  beneficiary_name: string;
+  beneficiary_document: string;
+  payment_method: PaymentMethod;
+  pix_key: string;
+  bank_name: string;
+  agency: string;
+  account: string;
+  boleto_code: string;
+};
+
+const PAYMENT_METHODS: PaymentMethod[] = ["pix", "ted", "boleto"];
+
+function paymentDraftFrom(expense: Expense): PayDraft {
+  return {
+    beneficiary_name: expense.beneficiary_name,
+    beneficiary_document: expense.beneficiary_document,
+    payment_method: expense.payment_method,
+    pix_key: expense.pix_key,
+    bank_name: expense.bank_name,
+    agency: expense.agency,
+    account: expense.account,
+    boleto_code: expense.boleto_code,
+  };
+}
 
 type CredentialRow = {
   label: string;
@@ -141,6 +167,7 @@ export function ExpenseDrawer({
   const [proof, setProof] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pay, setPay] = useState<PayDraft>(() => paymentDraftFrom(expense));
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const actions = allowedActions(user, expense);
@@ -152,6 +179,7 @@ export function ExpenseDrawer({
     setError("");
     setNote("");
     setProof(null);
+    setPay(paymentDraftFrom(expense));
     setModal(action);
   }
 
@@ -191,6 +219,16 @@ export function ExpenseDrawer({
       }
       if (modal === "resubmit") {
         payload.receipt = stored;
+        if (expense.area === "financeiro") {
+          payload.beneficiary_name = pay.beneficiary_name;
+          payload.beneficiary_document = pay.beneficiary_document;
+          payload.payment_method = pay.payment_method;
+          payload.pix_key = pay.pix_key;
+          payload.bank_name = pay.bank_name;
+          payload.agency = pay.agency;
+          payload.account = pay.account;
+          payload.boleto_code = pay.boleto_code;
+        }
       }
       await onAction(modal, payload);
       setModal(null);
@@ -235,7 +273,9 @@ export function ExpenseDrawer({
       case "reject":
         return "Explique o motivo. Essa decisão fica registrada na solicitação.";
       case "resubmit":
-        return "Anexe o que foi pedido e reenvie para a fila da área.";
+        return expense.area === "financeiro"
+          ? "Corrija PIX, TED ou boleto se for o caso, anexe o que faltou e reenvie."
+          : "Anexe o que foi pedido e reenvie para a fila da área.";
       case "attach_proof":
         return "O recibo fica anexado à solicitação. O status não muda.";
       case "progress":
@@ -506,6 +546,92 @@ export function ExpenseDrawer({
                       autoFocus
                     />
                   </label>
+                ) : null}
+                {modal === "resubmit" && expense.area === "financeiro" ? (
+                  <div className="modal-field resubmit-payment-fields">
+                    <span>Dados de pagamento</span>
+                    <div className="payment-options">
+                      {PAYMENT_METHODS.map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          className={cls(pay.payment_method === method && "selected")}
+                          onClick={() => setPay((current) => ({ ...current, payment_method: method }))}
+                        >
+                          <strong>{PAYMENT_METHOD_LABEL[method]}</strong>
+                        </button>
+                      ))}
+                    </div>
+                    <label>
+                      Beneficiário
+                      <input
+                        value={pay.beneficiary_name}
+                        onChange={(event) =>
+                          setPay((current) => ({ ...current, beneficiary_name: event.target.value }))
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      Documento
+                      <input
+                        value={pay.beneficiary_document}
+                        onChange={(event) =>
+                          setPay((current) => ({ ...current, beneficiary_document: event.target.value }))
+                        }
+                      />
+                    </label>
+                    {pay.payment_method === "pix" ? (
+                      <label>
+                        Chave PIX
+                        <input
+                          value={pay.pix_key}
+                          onChange={(event) => setPay((current) => ({ ...current, pix_key: event.target.value }))}
+                          required
+                        />
+                      </label>
+                    ) : null}
+                    {pay.payment_method === "ted" ? (
+                      <>
+                        <label>
+                          Banco
+                          <input
+                            value={pay.bank_name}
+                            onChange={(event) => setPay((current) => ({ ...current, bank_name: event.target.value }))}
+                            required
+                          />
+                        </label>
+                        <label>
+                          Agência
+                          <input
+                            value={pay.agency}
+                            onChange={(event) => setPay((current) => ({ ...current, agency: event.target.value }))}
+                            required
+                          />
+                        </label>
+                        <label>
+                          Conta
+                          <input
+                            value={pay.account}
+                            onChange={(event) => setPay((current) => ({ ...current, account: event.target.value }))}
+                            required
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {pay.payment_method === "boleto" ? (
+                      <label>
+                        Código do boleto
+                        <input
+                          value={pay.boleto_code}
+                          onChange={(event) =>
+                            setPay((current) => ({ ...current, boleto_code: event.target.value }))
+                          }
+                          required
+                        />
+                      </label>
+                    ) : null}
+                  </div>
                 ) : null}
                 {modal === "attach_proof" || modal === "resubmit" ? (
                   <div className="modal-field">

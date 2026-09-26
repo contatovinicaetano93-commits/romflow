@@ -65,6 +65,13 @@ export function parseAreas(values: unknown): RequestArea[] {
   return REQUEST_AREAS.filter((area) => unique.has(area));
 }
 
+export function parsePaymentMethod(value: unknown): PaymentMethod {
+  if (value === "pix" || value === "ted" || value === "boleto") {
+    return value;
+  }
+  throw new Error("Forma de pagamento inválida.");
+}
+
 export function parseExpenseType(value: unknown): ExpenseType {
   switch (value) {
     case "reembolso":
@@ -397,8 +404,9 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
   }
 
   if (admin) {
+    const canReview = !isOwner;
     if (expense.area === "financeiro" || expense.area === "rh") {
-      if (expense.status === "em_analise" || expense.status === "devolvido") {
+      if (canReview && (expense.status === "em_analise" || expense.status === "devolvido")) {
         actions.push("docs", "approve", "reject");
       }
       if (expense.status === "aprovada") {
@@ -406,7 +414,7 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
       }
     }
     if (expense.area === "compras") {
-      if (expense.status === "em_analise" || expense.status === "devolvido") {
+      if (canReview && (expense.status === "em_analise" || expense.status === "devolvido")) {
         actions.push("docs", "approve", "reject");
       }
       if (expense.status === "aprovada") {
@@ -421,10 +429,16 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
     }
     if (expense.area === "manutencao") {
       if (expense.status === "aberta") {
-        actions.push("progress", "complete", "reject");
+        if (canReview) {
+          actions.push("progress", "complete", "reject");
+        }
       }
       if (expense.status === "em_andamento") {
-        actions.push("complete", "reject", "attach_proof");
+        if (canReview) {
+          actions.push("complete", "reject", "attach_proof");
+        } else {
+          actions.push("attach_proof");
+        }
       }
       if (expense.status === "finalizada") {
         actions.push("attach_proof");

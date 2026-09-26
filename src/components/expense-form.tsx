@@ -385,6 +385,7 @@ export function ExpenseForm({
                   <input
                     type="date"
                     value={form.max_payment_date}
+                    min={todayIsoDate()}
                     max={dateCap}
                     onChange={(event) => setField("max_payment_date", event.target.value)}
                     required
