@@ -96,7 +96,7 @@ function PaymentCredentials({ expense }: { expense: Expense }) {
   return (
     <div className="beneficiary-table-card payment-credentials">
       {pairRows(paymentCredentialRows(expense)).map((pair, index) => (
-        <div key={pair[0].label} className={cls("beneficiary-table-row", index > 0 && "border-top")}>
+        <div key={pair.map((item) => item.label).join("-")} className={cls("beneficiary-table-row", index > 0 && "border-top")}>
           {pair.map((item) => (
             <div key={item.label} className={cls("beneficiary-cell", item.copy && "payment-credential")}>
               <small>{item.label}</small>
