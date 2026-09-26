@@ -43,6 +43,8 @@ import {
   isAdminInbox,
   isMaster,
   isSolicitanteInbox,
+  nextApproverId,
+  nextReviewNote,
   nextStatus,
   parseArea,
   parseAreas,
@@ -773,10 +775,8 @@ export async function applyFinanceActionRecord(
   const updated: Expense = {
     ...current,
     status,
-    approver: action === "resubmit" || action === "progress" || action === "complete" || action === "cancel"
-      ? current.approver
-      : actor.id,
-    review_note: payload?.note ?? current.review_note,
+    approver: nextApproverId(action, actor.id, current.approver),
+    review_note: nextReviewNote(action, payload?.note, current.review_note),
     payment_proof: paymentProof,
     receipt,
     updated: new Date().toISOString(),
@@ -841,13 +841,13 @@ export async function createInvitationRecord(
   const resolvedAreas = defaultAreasForRole(resolvedRole, areaIds);
   const db = getDb();
   const existingUser = await findUserRowByEmail(normalized);
-  let releasedUserId: string | null = null;
   if (existingUser) {
     if (existingUser.status === "active" && !isTombstoneEmail(existingUser.email)) {
       throw new Error("Já existe um usuário ativo com este e-mail.");
     }
-    await tombstoneUserRow(existingUser);
-    releasedUserId = existingUser.id;
+    throw new Error(
+      "Este e-mail está desativado. Reative na lista de usuários ou use Apagar para liberar o endereço.",
+    );
   }
   await cancelPendingInvitesForEmail(normalized);
   const invitation: Invitation = {
@@ -882,7 +882,7 @@ export async function createInvitationRecord(
   }
   await replaceInvitationAreas(invitation.id, resolvedAreas);
   await writeAudit(actor.id, "CREATE_INVITE", invitation.id, "—", invitation.email);
-  return { invitation, releasedUserId };
+  return { invitation, releasedUserId: null };
 }
 
 export async function getInvitationByToken(token: string): Promise<Invitation> {

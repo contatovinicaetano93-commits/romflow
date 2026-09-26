@@ -4,7 +4,9 @@ import { FormEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Ban,
+  Check,
   CheckCircle2,
+  Copy,
   Download,
   FileText,
   RotateCcw,
@@ -27,6 +29,97 @@ import { fileHref, fileToStored } from "@/lib/files";
 import { allowedActions } from "@/lib/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
 import { StatusBadge } from "./status-badge";
+
+type CredentialRow = {
+  label: string;
+  value: string;
+  copy?: boolean;
+};
+
+function paymentCredentialRows(expense: Expense): CredentialRow[] {
+  const rows: CredentialRow[] = [{ label: "Beneficiário", value: expense.beneficiary_name }];
+  if (expense.beneficiary_document.trim()) {
+    rows.push({ label: "Documento", value: expense.beneficiary_document });
+  }
+  rows.push({ label: "Forma", value: PAYMENT_METHOD_LABEL[expense.payment_method] });
+  switch (expense.payment_method) {
+    case "pix":
+      if (expense.pix_key.trim()) {
+        rows.push({ label: "Chave PIX", value: expense.pix_key, copy: true });
+      }
+      break;
+    case "ted":
+      if (expense.bank_name.trim()) {
+        rows.push({ label: "Banco", value: expense.bank_name });
+      }
+      if (expense.agency.trim()) {
+        rows.push({ label: "Agência", value: expense.agency, copy: true });
+      }
+      if (expense.account.trim()) {
+        rows.push({ label: "Conta", value: expense.account, copy: true });
+      }
+      break;
+    case "boleto":
+      if (expense.boleto_code.trim()) {
+        rows.push({ label: "Código do boleto", value: expense.boleto_code, copy: true });
+      }
+      break;
+    default:
+      return assertNever(expense.payment_method);
+  }
+  return rows;
+}
+
+function pairRows<T>(items: T[]): T[][] {
+  const pairs: T[][] = [];
+  for (let index = 0; index < items.length; index += 2) {
+    pairs.push(items.slice(index, index + 2));
+  }
+  return pairs;
+}
+
+function PaymentCredentials({ expense }: { expense: Expense }) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copyValue(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      window.setTimeout(() => {
+        setCopied((current) => (current === label ? null : current));
+      }, 1600);
+    } catch {
+      setCopied(null);
+    }
+  }
+
+  return (
+    <div className="beneficiary-table-card payment-credentials">
+      {pairRows(paymentCredentialRows(expense)).map((pair, index) => (
+        <div key={pair.map((item) => item.label).join("-")} className={cls("beneficiary-table-row", index > 0 && "border-top")}>
+          {pair.map((item) => (
+            <div key={item.label} className={cls("beneficiary-cell", item.copy && "payment-credential")}>
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+              {item.copy ? (
+                <button
+                  type="button"
+                  className="copy-credential"
+                  onClick={() => {
+                    void copyValue(item.label, item.value);
+                  }}
+                >
+                  {copied === item.label ? <Check size={12} /> : <Copy size={12} />}
+                  {copied === item.label ? "Copiado" : "Copiar"}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function ExpenseDrawer({
   expense,
@@ -358,9 +451,7 @@ export function ExpenseDrawer({
                     <small>Justificativa da data</small> {expense.payment_date_justification}
                   </p>
                 ) : null}
-                <p>
-                  <small>Beneficiário</small> {expense.beneficiary_name} · {PAYMENT_METHOD_LABEL[expense.payment_method]}
-                </p>
+                <PaymentCredentials expense={expense} />
               </>
             ) : null}
             {expense.receipt ? (

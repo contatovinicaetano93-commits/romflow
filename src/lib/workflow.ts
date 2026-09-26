@@ -9,6 +9,7 @@ import type {
   RequestArea,
   Role,
   Screen,
+  StoredFile,
   User,
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
@@ -305,6 +306,8 @@ export function assertExpenseCreate(input: {
   max_payment_date: string;
   payment_date_justification: string;
   event_date: string;
+  receipt: StoredFile | null;
+  receipt_justification: string;
 }): number {
   if (!input.title.trim()) {
     throw new Error("Informe o título.");
@@ -343,6 +346,9 @@ export function assertExpenseCreate(input: {
       break;
     default:
       return assertNever(input.payment_method);
+  }
+  if (!input.receipt && input.receipt_justification.trim().length < 15) {
+    throw new Error("Anexe o comprovante ou justifique com pelo menos 15 caracteres.");
   }
   validatePaymentDate(input.expense_type, input.max_payment_date, input.payment_date_justification);
   validateEventDate(input.expense_type, input.event_date);
@@ -515,6 +521,49 @@ export function nextStatus(action: RequestAction, expense: Expense): ExpenseStat
       return "finalizada";
     case "cancel":
       return "cancelada";
+    default:
+      return assertNever(action);
+  }
+}
+
+export function nextApproverId(
+  action: RequestAction,
+  actorId: string,
+  current: string | null,
+): string | null {
+  switch (action) {
+    case "docs":
+    case "approve":
+    case "reject":
+      return actorId;
+    case "resubmit":
+    case "attach_proof":
+    case "progress":
+    case "complete":
+    case "cancel":
+      return current;
+    default:
+      return assertNever(action);
+  }
+}
+
+export function nextReviewNote(
+  action: RequestAction,
+  payloadNote: string | undefined,
+  current: string,
+): string {
+  switch (action) {
+    case "approve":
+    case "resubmit":
+      return "";
+    case "docs":
+    case "reject":
+      return (payloadNote ?? current).trim();
+    case "attach_proof":
+    case "progress":
+    case "complete":
+    case "cancel":
+      return current;
     default:
       return assertNever(action);
   }
