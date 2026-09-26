@@ -775,12 +775,25 @@ body {
     display: none;
   }
 
+  .sidebar-user {
+    display: none;
+  }
+
   .sidebar {
     padding-bottom: 10px;
   }
 
   .side-nav {
     padding-bottom: 20px;
+  }
+
+  .form-step {
+    min-height: 0;
+    padding-bottom: 28px;
+  }
+
+  .report-category > div {
+    padding-right: 64px;
   }
 
   .kindness-banner {
@@ -906,6 +919,10 @@ body {
     display: flex !important;
     width: 100%;
     margin-left: 0;
+  }
+
+  .finance-flow-scroll {
+    padding-right: 20px;
   }
 
   .details-drawer {
