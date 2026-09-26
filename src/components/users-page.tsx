@@ -89,6 +89,38 @@ function CompanyPicker({
   );
 }
 
+function DirectoryActions({
+  item,
+  currentUserId,
+  onRevoke,
+  onEdit,
+  onToggle,
+}: {
+  item: User;
+  currentUserId: string;
+  onRevoke: () => void;
+  onEdit: () => void;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="user-row-actions">
+      <button className="danger-text-button" type="button" disabled={item.id === currentUserId} onClick={onRevoke}>
+        <Trash2 size={14} /> Apagar
+      </button>
+      <button className="secondary-button" type="button" onClick={onEdit}>
+        <Pencil size={14} /> Editar
+      </button>
+      <button
+        className={cls("switch-button", item.status === "active" && "on")}
+        disabled={item.id === currentUserId}
+        onClick={onToggle}
+      >
+        <i /> {item.status === "active" ? "Ativo" : "Inativo"}
+      </button>
+    </div>
+  );
+}
+
 function AreaPicker({
   selected,
   onChange,
@@ -467,98 +499,129 @@ export function UsersPage({
             Mostrar inativos
           </label>
         </div>
-        <div className="expense-table-wrap">
-          <table className="expense-table">
-            <thead>
-              <tr>
-                <th>Usuário</th>
-                <th>Perfil</th>
-                <th>Empresas permitidas</th>
-                <th>Status</th>
-                <th>Cadastro</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="empty-state">
-                      <strong>{query ? "Nenhum usuário encontrado" : "Nenhum acesso ativo"}</strong>
-                      <span>
-                        {showInactive
-                          ? "Nenhum usuário corresponde à busca."
-                          : "Apagar tira a pessoa de todos os negócios e libera o e-mail. Marque “Mostrar inativos” só para quem foi desativado sem apagar."}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
+        {filtered.length === 0 ? (
+          <div className="empty-state">
+            <strong>{query ? "Nenhum usuário encontrado" : "Nenhum acesso ativo"}</strong>
+            <span>
+              {showInactive
+                ? "Nenhum usuário corresponde à busca."
+                : "Apagar tira a pessoa de todos os negócios e libera o e-mail. Marque “Mostrar inativos” só para quem foi desativado sem apagar."}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="expense-table-wrap desktop-table-only">
+              <table className="expense-table">
+                <thead>
+                  <tr>
+                    <th>Usuário</th>
+                    <th>Perfil</th>
+                    <th>Empresas permitidas</th>
+                    <th>Status</th>
+                    <th>Cadastro</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong>{item.name}</strong>
+                        <small className="table-subline">{item.email}</small>
+                      </td>
+                      <td>
+                        <span className={`role-badge ${ROLE_CLASS[item.role]}`}>
+                          {ROLE_LABEL[item.role]}
+                        </span>
+                      </td>
+                      <td>
+                        <CompanyChips ids={item.companyIds} companies={companies} />
+                      </td>
+                      <td>
+                        <span className={`user-status ${item.status}`}>
+                          <i /> {item.status === "active" ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
+                      <td>{formatDate(item.created)}</td>
+                      <td>
+                        <DirectoryActions
+                          item={item}
+                          currentUserId={currentUserId}
+                          onRevoke={() =>
+                            setConfirmRevoke({
+                              kind: "user",
+                              id: item.id,
+                              label: item.name,
+                            })
+                          }
+                          onEdit={() => startUserEdit(item)}
+                          onToggle={() => {
+                            void (async () => {
+                              try {
+                                await onToggle(item.id);
+                              } catch (caught) {
+                                setError(
+                                  caught instanceof Error
+                                    ? caught.message
+                                    : "Não foi possível alterar o status do usuário.",
+                                );
+                              }
+                            })();
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mobile-card-list">
               {filtered.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <strong>{item.name}</strong>
-                    <small className="table-subline">{item.email}</small>
-                  </td>
-                  <td>
-                    <span className={`role-badge ${ROLE_CLASS[item.role]}`}>
-                      {ROLE_LABEL[item.role]}
-                    </span>
-                  </td>
-                  <td>
-                    <CompanyChips ids={item.companyIds} companies={companies} />
-                  </td>
-                  <td>
+                <article className="maintenance-ticket-card" key={item.id}>
+                  <div className="maintenance-ticket-head">
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small className="table-subline">{item.email}</small>
+                    </div>
                     <span className={`user-status ${item.status}`}>
                       <i /> {item.status === "active" ? "Ativo" : "Inativo"}
                     </span>
-                  </td>
-                  <td>{formatDate(item.created)}</td>
-                  <td>
-                    <div className="user-row-actions">
-                      <button
-                        className="danger-text-button"
-                        type="button"
-                        disabled={item.id === currentUserId}
-                        onClick={() =>
-                          setConfirmRevoke({
-                            kind: "user",
-                            id: item.id,
-                            label: item.name,
-                          })
+                  </div>
+                  <div className="mobile-request-meta">
+                    <span className={`role-badge ${ROLE_CLASS[item.role]}`}>{ROLE_LABEL[item.role]}</span>
+                    <small>{formatDate(item.created)}</small>
+                  </div>
+                  <CompanyChips ids={item.companyIds} companies={companies} />
+                  <DirectoryActions
+                    item={item}
+                    currentUserId={currentUserId}
+                    onRevoke={() =>
+                      setConfirmRevoke({
+                        kind: "user",
+                        id: item.id,
+                        label: item.name,
+                      })
+                    }
+                    onEdit={() => startUserEdit(item)}
+                    onToggle={() => {
+                      void (async () => {
+                        try {
+                          await onToggle(item.id);
+                        } catch (caught) {
+                          setError(
+                            caught instanceof Error
+                              ? caught.message
+                              : "Não foi possível alterar o status do usuário.",
+                          );
                         }
-                      >
-                        <Trash2 size={14} /> Apagar
-                      </button>
-                      <button className="secondary-button" type="button" onClick={() => startUserEdit(item)}>
-                        <Pencil size={14} /> Editar
-                      </button>
-                      <button
-                        className={cls("switch-button", item.status === "active" && "on")}
-                        disabled={item.id === currentUserId}
-                        onClick={() => {
-                          void (async () => {
-                            try {
-                              await onToggle(item.id);
-                            } catch (caught) {
-                              setError(
-                                caught instanceof Error
-                                  ? caught.message
-                                  : "Não foi possível alterar o status do usuário.",
-                              );
-                            }
-                          })();
-                        }}
-                      >
-                        <i /> {item.status === "active" ? "Ativo" : "Inativo"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                      })();
+                    }}
+                  />
+                </article>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </>
+        )}
       </section>
       <section className="panel invitation-panel">
         <header>

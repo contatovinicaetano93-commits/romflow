@@ -316,9 +316,11 @@ export function AppShell({
             <button className="icon-button mobile-menu" onClick={onToggleMenu} aria-label="Abrir menu">
               <Menu size={18} />
             </button>
-            <button className="icon-button" onClick={onBack} aria-label="Voltar">
-              <ArrowLeft size={18} />
-            </button>
+            {screen === "dashboard" ? null : (
+              <button className="icon-button" onClick={onBack} aria-label="Voltar">
+                <ArrowLeft size={18} />
+              </button>
+            )}
             <div>
               <span>ROM Flow</span>
               <h1>{titleFor(screen)}</h1>

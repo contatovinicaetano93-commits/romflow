@@ -93,7 +93,7 @@ export function AuditPage({
           </div>
         ) : (
           <div className="expense-table-wrap">
-            <table className="expense-table audit-table">
+            <table className="expense-table audit-table stack-on-mobile">
               <thead>
                 <tr>
                   <th>Data e hora</th>
@@ -146,7 +146,7 @@ export function AuditPage({
           </div>
         ) : (
           <div className="expense-table-wrap">
-            <table className="expense-table audit-table">
+            <table className="expense-table audit-table stack-on-mobile">
               <thead>
                 <tr>
                   <th>Data e hora</th>
