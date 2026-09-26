@@ -348,8 +348,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (nextCompany) {
       try {
         await refreshCompany(nextCompany.id);
-      } catch {
-        setWorkingCompanyId(nextCompany.id);
+      } catch (caught) {
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
+        );
       }
     }
     try {
