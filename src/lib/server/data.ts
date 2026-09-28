@@ -54,6 +54,7 @@ import {
   parseStatus,
   withEventDateObservation,
   assertExpenseCreate,
+  assertFinancePayee,
 } from "@/lib/workflow";
 import { fileProxyUrl, persistStoredFile, publicStoredFile, storedFileGrantsPathname } from "@/lib/server/blob";
 import { PERSONAL_BUSINESS_IDS } from "@/lib/seed";
@@ -394,7 +395,7 @@ const INBOX_STATUSES = [
   "finalizada",
 ] as const;
 
-const INBOX_PER_COMPANY = 8;
+const INBOX_PER_COMPANY = 40;
 
 export function emptySnapshot(): Database {
   return {
@@ -608,11 +609,8 @@ export async function getSnapshotSafe(actor: User): Promise<Database | null> {
 
 export async function loginWithPassword(email: string, password: string): Promise<User> {
   const row = await findUserRowByEmail(email);
-  if (!row || !(await verifyPassword(password, row.passwordHash)) || isTombstoneEmail(row.email)) {
+  if (!row || !(await verifyPassword(password, row.passwordHash)) || isTombstoneEmail(row.email) || row.status !== "active") {
     throw new Error("E-mail ou senha incorretos.");
-  }
-  if (row.status !== "active") {
-    throw new Error("Este acesso está desativado. Use Esqueci a senha só depois que o acesso for reativado.");
   }
   const user = await loadUser(row.id);
   if (!user) {
@@ -736,7 +734,6 @@ export async function createExpenseRecord(
 function resubmitPaymentFields(
   current: Expense,
   payload: FinanceActionPayload | undefined,
-  receipt: Expense["receipt"],
 ): Pick<
   Expense,
   | "beneficiary_name"
@@ -773,10 +770,9 @@ function resubmitPaymentFields(
     account: method === "ted" ? (payload?.account ?? current.account) : "",
     boleto_code: method === "boleto" ? (payload?.boleto_code ?? current.boleto_code) : "",
   };
-  assertExpenseCreate({
-    ...current,
+  assertFinancePayee({
+    amount: current.amount,
     ...next,
-    receipt,
   });
   return next;
 }
@@ -854,7 +850,7 @@ export async function applyFinanceActionRecord(
     current.payment_proof,
   );
   const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts", actor.id, current.receipt);
-  const paymentFields = action === "resubmit" ? resubmitPaymentFields(current, payload, receipt) : current;
+  const paymentFields = action === "resubmit" ? resubmitPaymentFields(current, payload) : current;
   const updated: Expense = {
     ...current,
     ...paymentFields,
@@ -1055,7 +1051,7 @@ export async function rotateInvitationLink(
 }
 
 function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): string[] {
-  if (role !== "master" && role !== "admin_financeiro") {
+  if (role !== "master") {
     return invitedCompanyIds;
   }
   const companyIds = [...invitedCompanyIds];
@@ -1168,15 +1164,22 @@ export async function updateUserAccessRecord(
   if (actor.id === userId && resolvedRole !== "master") {
     throw new Error("Você não pode remover o próprio perfil de master.");
   }
+  const previousLinks = await db
+    .select({ companyId: userCompanies.companyId })
+    .from(userCompanies)
+    .where(eq(userCompanies.userId, userId));
+  if (actor.id === userId) {
+    const currentIds = [...previousLinks.map((item) => item.companyId)].sort();
+    const nextIds = [...resolvedCompanies].sort();
+    if (currentIds.join(",") !== nextIds.join(",")) {
+      throw new Error("Você não pode alterar as próprias empresas neste painel.");
+    }
+  }
   if (parseRole(row.role) === "master" && resolvedRole !== "master") {
     if ((await countOtherActiveMasters(userId)) === 0) {
       throw new Error("É preciso manter ao menos um master ativo.");
     }
   }
-  const previousLinks = await db
-    .select({ companyId: userCompanies.companyId })
-    .from(userCompanies)
-    .where(eq(userCompanies.userId, userId));
   await db.update(users).set({ role: resolvedRole }).where(eq(users.id, userId));
   await replaceUserCompanies(userId, resolvedCompanies);
   await replaceUserAreas(userId, resolvedAreas);

@@ -129,13 +129,38 @@ function isSafeInlineContentType(type: string): boolean {
   return type.startsWith(INLINE_IMAGE_PREFIX) && type !== "image/svg+xml";
 }
 
-function storedContentType(type: string): string {
-  const normalized = normalizedContentType(type);
-  if (!normalized) {
-    return "application/octet-stream";
+function contentTypeFromName(name: string): string | null {
+  const ext = name.split(".").pop()?.trim().toLowerCase() ?? "";
+  switch (ext) {
+    case "pdf":
+      return "application/pdf";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "heic":
+    case "heif":
+      return "image/heic";
+    default:
+      return null;
   }
-  if (normalized === "application/octet-stream" || isSafeInlineContentType(normalized)) {
+}
+
+function storedContentType(type: string, filename = ""): string {
+  const normalized = normalizedContentType(type);
+  if (isSafeInlineContentType(normalized)) {
     return normalized;
+  }
+  if (!normalized || normalized === "application/octet-stream") {
+    const inferred = contentTypeFromName(filename);
+    if (inferred && isSafeInlineContentType(inferred)) {
+      return inferred;
+    }
   }
   throw new Error("Envie um PDF ou uma imagem.");
 }
@@ -235,7 +260,7 @@ export async function persistStoredFile(
   if (!file.dataUrl) {
     throw new Error("Arquivo inválido.");
   }
-  const contentType = storedContentType(file.type);
+  const contentType = storedContentType(file.type, file.name);
   assertBlobReady();
   if (!blobEnabled()) {
     if (file.dataUrl.length > MAX_DATA_URL_CHARS) {
@@ -258,7 +283,7 @@ export async function persistUploadFile(file: File, folder: string): Promise<Sto
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error("O arquivo deve ter no máximo 10 MB.");
   }
-  const contentType = storedContentType(file.type);
+  const contentType = storedContentType(file.type, file.name);
   assertBlobReady();
   if (!blobEnabled()) {
     const buf = Buffer.from(await file.arrayBuffer());

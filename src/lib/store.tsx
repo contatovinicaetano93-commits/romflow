@@ -500,9 +500,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const switchCompany = useCallback(() => {
+    setNotice(null);
     setCompany(null);
     setWorkingCompanyId(null);
-  }, []);
+    void refreshDirectory().catch(() => undefined);
+  }, [refreshDirectory]);
 
   const accessibleCompanies = useCallback(() => {
     if (!user) {
@@ -743,10 +745,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         companies: [...current.companies.filter((item) => item.id !== result.company.id), result.company],
       }));
+      const previousCompany = companyRef.current;
       setCompany(result.company);
       try {
         await refreshCompany(result.company.id);
       } catch (caught) {
+        setCompany(previousCompany);
         setNotice(
           caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
         );

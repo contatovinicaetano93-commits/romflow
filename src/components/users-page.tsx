@@ -37,25 +37,29 @@ function CompanyPicker({
   companies,
   selected,
   onChange,
+  disabled,
 }: {
   companies: Company[];
   selected: string[];
   onChange: (next: string[]) => void;
+  disabled?: boolean;
 }) {
   const visibleCompanies = companies.filter((item) => item.is_active || selected.includes(item.id));
   return (
     <div className="company-selection-group">
       <div className="company-selection-header">
         <p className="company-selection-label">Empresas de acesso</p>
-        <div className="company-selection-actions">
-          <button type="button" onClick={() => onChange(visibleCompanies.map((item) => item.id))}>
-            Marcar todas
-          </button>
-          <span>•</span>
-          <button type="button" onClick={() => onChange([])}>
-            Desmarcar
-          </button>
-        </div>
+        {disabled ? null : (
+          <div className="company-selection-actions">
+            <button type="button" onClick={() => onChange(visibleCompanies.map((item) => item.id))}>
+              Marcar todas
+            </button>
+            <span>•</span>
+            <button type="button" onClick={() => onChange([])}>
+              Desmarcar
+            </button>
+          </div>
+        )}
       </div>
       <div className="company-checkbox-grid">
         {visibleCompanies.map((company) => {
@@ -65,6 +69,7 @@ function CompanyPicker({
               <input
                 type="checkbox"
                 checked={checked}
+                disabled={disabled}
                 onChange={() =>
                   onChange(
                     checked
@@ -82,9 +87,13 @@ function CompanyPicker({
           );
         })}
       </div>
-      <p className="signup-field-hint">
-        O usuário só vê e opera nas empresas marcadas. Selecione ao menos uma empresa ativa.
-      </p>
+      {disabled ? (
+        <p className="signup-field-hint">Você não pode alterar as próprias empresas neste painel.</p>
+      ) : (
+        <p className="signup-field-hint">
+          O usuário só vê e opera nas empresas marcadas. Selecione ao menos uma empresa ativa.
+        </p>
+      )}
     </div>
   );
 }
@@ -321,6 +330,13 @@ export function UsersPage({
   }
 
   async function handleCopyInvite(invitationId: string) {
+    if (
+      !window.confirm(
+        "Isso gera um link novo e invalida o convite enviado por e-mail. Continuar?",
+      )
+    ) {
+      return;
+    }
     setError("");
     try {
       const token = await onRotateInvite(invitationId);
@@ -681,11 +697,11 @@ export function UsersPage({
                   <button
                     className="secondary-button"
                     type="button"
-                    title="Gera um novo link e invalida o anterior"
+                    title="Gera um novo link e invalida o enviado por e-mail"
                     onClick={() => void handleCopyInvite(item.id)}
                   >
                     {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
-                    {copied === item.id ? "Link copiado" : "Copiar link"}
+                    {copied === item.id ? "Link copiado" : "Gerar novo link"}
                   </button>
                   <button
                     className="danger-text-button"
@@ -698,7 +714,7 @@ export function UsersPage({
                       })
                     }
                   >
-                    <Trash2 size={14} /> Excluir convite
+                    <Trash2 size={14} /> Cancelar convite
                   </button>
                 </div>
               </div>
@@ -749,10 +765,10 @@ export function UsersPage({
                 <button
                   className="primary-button"
                   type="button"
-                  onClick={() => {
+                    onClick={() => {
                     setCreated(null);
                     setEmail("");
-                    setSelected([]);
+                    setSelected(companyId ? [companyId] : []);
                     setError("");
                     setCopied("");
                   }}
@@ -840,7 +856,12 @@ export function UsersPage({
                 disabled={editing.kind === "user" && editing.user.id === currentUserId}
               />
             </label>
-            <CompanyPicker companies={companies} selected={editSelected} onChange={setEditSelected} />
+            <CompanyPicker
+              companies={companies}
+              selected={editSelected}
+              onChange={setEditSelected}
+              disabled={editing.kind === "user" && editing.user.id === currentUserId}
+            />
             <AreaPicker role={editRole} selected={editAreas} onChange={setEditAreas} />
             {editError ? <div className="form-error">{editError}</div> : null}
             <footer>
@@ -865,7 +886,7 @@ export function UsersPage({
                 <Trash2 size={20} />
               </div>
               <div>
-                <h3>Apagar cadastro</h3>
+                <h3>{confirmRevoke.kind === "invite" ? "Cancelar convite" : "Apagar cadastro"}</h3>
                 <p className="modal-lead">
                   {confirmRevoke.kind === "user"
                     ? `${confirmRevoke.label} sai de todos os negócios. O e-mail fica livre para um novo convite; o histórico de solicitações permanece.`
@@ -885,7 +906,7 @@ export function UsersPage({
               </button>
               <button className="danger-button" type="button" disabled={revoking} onClick={() => void handleRevoke()}>
                 {revoking ? <span className="spinner" /> : null}
-                {revoking ? "Apagando..." : "Apagar de todos os negócios"}
+                {revoking ? "Apagando..." : confirmRevoke.kind === "invite" ? "Cancelar convite" : "Apagar de todos os negócios"}
               </button>
             </footer>
           </div>
