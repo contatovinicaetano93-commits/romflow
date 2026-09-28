@@ -314,18 +314,37 @@ async function loadInvitations(): Promise<Invitation[]> {
   const rows = await db.select().from(invitations).orderBy(desc(invitations.created));
   const links = await db.select().from(invitationCompanies);
   const areaLinks = await db.select().from(invitationAreas);
-  return rows.map((row) => ({
-    id: row.id,
-    email: row.email,
-    role: parseRole(row.role),
-    companyIds: links.filter((item) => item.invitationId === row.id).map((item) => item.companyId),
-    areaIds: parseAreas(areaLinks.filter((item) => item.invitationId === row.id).map((item) => item.area)),
-    token: row.token,
-    invitedBy: row.invitedBy,
-    created: row.created,
-    expires: row.expires,
-    accepted: row.accepted,
-  }));
+  return rows.map((row) =>
+    toPublicInvitation({
+      id: row.id,
+      email: row.email,
+      role: parseRole(row.role),
+      companyIds: links.filter((item) => item.invitationId === row.id).map((item) => item.companyId),
+      areaIds: parseAreas(areaLinks.filter((item) => item.invitationId === row.id).map((item) => item.area)),
+      invitedBy: row.invitedBy,
+      created: row.created,
+      expires: row.expires,
+      accepted: row.accepted,
+    }),
+  );
+}
+
+function isHashedInviteToken(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value);
+}
+
+function toPublicInvitation(input: {
+  id: string;
+  email: string;
+  role: Role;
+  companyIds: string[];
+  areaIds: RequestArea[];
+  invitedBy: string;
+  created: string;
+  expires: string;
+  accepted: boolean;
+}): Invitation {
+  return { ...input, token: "" };
 }
 
 async function writeAudit(
@@ -904,7 +923,7 @@ export async function createInvitationRecord(
   role: Role,
   companyIds: string[],
   areaIds: RequestArea[],
-): Promise<{ invitation: Invitation; releasedUserId: string | null }> {
+): Promise<{ invitation: Invitation; plaintextToken: string; releasedUserId: string | null }> {
   if (!isMaster(actor.role)) {
     throw new Error("Apenas o master pode criar acessos.");
   }
@@ -923,23 +942,23 @@ export async function createInvitationRecord(
     );
   }
   await cancelPendingInvitesForEmail(normalized);
-  const invitation: Invitation = {
+  const plaintextToken = inviteToken();
+  const invitation = toPublicInvitation({
     id: uid("inv"),
     email: email.trim().toLowerCase(),
     role: resolvedRole,
     companyIds: resolvedCompanies,
     areaIds: resolvedAreas,
-    token: inviteToken(),
     invitedBy: actor.id,
     created: new Date().toISOString(),
     expires: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     accepted: false,
-  };
+  });
   await db.insert(invitations).values({
     id: invitation.id,
     email: invitation.email,
     role: invitation.role,
-    token: invitation.token,
+    token: hashToken(plaintextToken),
     invitedBy: invitation.invitedBy,
     created: invitation.created,
     expires: invitation.expires,
@@ -955,18 +974,19 @@ export async function createInvitationRecord(
   }
   await replaceInvitationAreas(invitation.id, resolvedAreas);
   await writeAudit(actor.id, "CREATE_INVITE", invitation.id, "—", invitation.email);
-  return { invitation, releasedUserId: null };
+  return { invitation, plaintextToken, releasedUserId: null };
 }
 
-export async function getInvitationByToken(token: string): Promise<Invitation> {
+async function invitationFromRow(row: {
+  id: string;
+  email: string;
+  role: string;
+  invitedBy: string;
+  created: string;
+  expires: string;
+  accepted: boolean;
+}): Promise<Invitation> {
   const db = getDb();
-  const [row] = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
-  if (!row || row.accepted) {
-    throw new Error("Convite inválido ou expirado. Solicite um novo convite ao administrador.");
-  }
-  if (new Date(row.expires).getTime() < Date.now()) {
-    throw new Error("Convite expirado. Solicite um novo convite ao administrador.");
-  }
   const links = await db
     .select()
     .from(invitationCompanies)
@@ -975,18 +995,63 @@ export async function getInvitationByToken(token: string): Promise<Invitation> {
     .select()
     .from(invitationAreas)
     .where(eq(invitationAreas.invitationId, row.id));
-  return {
+  return toPublicInvitation({
     id: row.id,
     email: row.email,
     role: parseRole(row.role),
     companyIds: links.map((item) => item.companyId),
     areaIds: parseAreas(areaLinks.map((item) => item.area)),
-    token: row.token,
     invitedBy: row.invitedBy,
     created: row.created,
     expires: row.expires,
     accepted: row.accepted,
-  };
+  });
+}
+
+export async function getInvitationByToken(token: string): Promise<Invitation> {
+  const db = getDb();
+  const hashed = hashToken(token);
+  const hashedMatch = await db.select().from(invitations).where(eq(invitations.token, hashed)).limit(1);
+  let row = hashedMatch[0];
+  if (!row) {
+    const legacyMatch = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
+    const legacy = legacyMatch[0];
+    if (legacy && !isHashedInviteToken(legacy.token)) {
+      try {
+        await db.update(invitations).set({ token: hashed }).where(eq(invitations.id, legacy.id));
+      } catch {
+        // Another request may have migrated the same legacy token.
+      }
+      row = legacy;
+    }
+  }
+  if (!row || row.accepted) {
+    throw new Error("Convite inválido ou expirado. Solicite um novo convite ao administrador.");
+  }
+  if (new Date(row.expires).getTime() < Date.now()) {
+    throw new Error("Convite expirado. Solicite um novo convite ao administrador.");
+  }
+  return invitationFromRow(row);
+}
+
+export async function rotateInvitationLink(
+  actor: User,
+  invitationId: string,
+): Promise<{ invitation: Invitation; plaintextToken: string }> {
+  if (!isMaster(actor.role)) {
+    throw new Error("Apenas o master pode copiar o link de convite.");
+  }
+  const db = getDb();
+  const [row] = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
+  if (!row || row.accepted) {
+    throw new Error("Convite inválido ou já utilizado.");
+  }
+  if (new Date(row.expires).getTime() < Date.now()) {
+    throw new Error("Convite expirado. Solicite um novo convite ao administrador.");
+  }
+  const plaintextToken = inviteToken();
+  await db.update(invitations).set({ token: hashToken(plaintextToken) }).where(eq(invitations.id, invitationId));
+  return { invitation: await invitationFromRow(row), plaintextToken };
 }
 
 function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): string[] {
@@ -1152,7 +1217,7 @@ export async function updateInvitationAccessRecord(
     role: resolvedRole,
     companyIds: resolvedCompanies,
     areaIds: resolvedAreas,
-    token: row.token,
+    token: "",
     invitedBy: row.invitedBy,
     created: row.created,
     expires: row.expires,

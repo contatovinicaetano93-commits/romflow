@@ -164,9 +164,17 @@ function AreaPicker({
   );
 }
 
-function RoleSelect({ value, onChange }: { value: Role; onChange: (role: Role) => void }) {
+function RoleSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Role;
+  onChange: (role: Role) => void;
+  disabled?: boolean;
+}) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value as Role)}>
+    <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as Role)}>
       <option value="solicitante">Solicitante</option>
       <option value="admin_financeiro">Admin financeiro</option>
       <option value="admin_manutencao">Admin manutenção</option>
@@ -189,6 +197,7 @@ export function UsersPage({
   companyName,
   currentUserId,
   onInvite,
+  onRotateInvite,
   onUpdateUser,
   onUpdateInvitation,
   onToggle,
@@ -208,6 +217,7 @@ export function UsersPage({
     companyIds: string[],
     areaIds: RequestArea[],
   ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
+  onRotateInvite: (invitationId: string) => Promise<string>;
   onUpdateUser: (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => Promise<void>;
   onUpdateInvitation: (
     invitationId: string,
@@ -310,11 +320,25 @@ export function UsersPage({
     setCopied(id);
   }
 
+  async function handleCopyInvite(invitationId: string) {
+    setError("");
+    try {
+      const token = await onRotateInvite(invitationId);
+      await copyLink(signupUrl(token), invitationId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Não foi possível copiar o link.");
+    }
+  }
+
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setError("");
     if (selected.length === 0) {
       setError("Selecione ao menos uma empresa de acesso.");
+      return;
+    }
+    if (role === "solicitante" && areas.length === 0) {
+      setError("Selecione ao menos uma área de solicitação.");
       return;
     }
     setSubmitting(true);
@@ -343,6 +367,10 @@ export function UsersPage({
     setEditError("");
     if (editSelected.length === 0) {
       setEditError("Selecione ao menos uma empresa de acesso.");
+      return;
+    }
+    if (editRole === "solicitante" && editAreas.length === 0) {
+      setEditError("Selecione ao menos uma área de solicitação.");
       return;
     }
     setEditSubmitting(true);
@@ -634,7 +662,6 @@ export function UsersPage({
           </div>
         ) : (
           pendingInvites.map((item) => {
-            const link = signupUrl(item.token);
             return (
               <div key={item.id}>
                 <Mail size={18} />
@@ -654,7 +681,8 @@ export function UsersPage({
                   <button
                     className="secondary-button"
                     type="button"
-                    onClick={() => void copyLink(link, item.id)}
+                    title="Gera um novo link e invalida o anterior"
+                    onClick={() => void handleCopyInvite(item.id)}
                   >
                     {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
                     {copied === item.id ? "Link copiado" : "Copiar link"}
@@ -806,7 +834,11 @@ export function UsersPage({
             )}
             <label>
               Perfil
-              <RoleSelect value={editRole} onChange={setEditRole} />
+              <RoleSelect
+                value={editRole}
+                onChange={setEditRole}
+                disabled={editing.kind === "user" && editing.user.id === currentUserId}
+              />
             </label>
             <CompanyPicker companies={companies} selected={editSelected} onChange={setEditSelected} />
             <AreaPicker role={editRole} selected={editAreas} onChange={setEditAreas} />

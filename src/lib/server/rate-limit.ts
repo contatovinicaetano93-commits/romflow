@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { rateLimits } from "@/lib/db/schema";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
@@ -37,6 +36,18 @@ function assertMemoryLimit(key: string, label: string, max = MAX_ATTEMPTS): void
   }
 }
 
+function countFromExecute(result: unknown): number {
+  if (Array.isArray(result)) {
+    const row = result[0] as { count?: number } | undefined;
+    return Number(row?.count ?? 1);
+  }
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows: Array<{ count?: number }> }).rows;
+    return Number(rows[0]?.count ?? 1);
+  }
+  return 1;
+}
+
 export async function assertRateLimit(
   key: string,
   options: { label?: string; max?: number } = {},
@@ -44,25 +55,28 @@ export async function assertRateLimit(
   const label = options.label ?? "Muitas tentativas. Aguarde alguns minutos e tente de novo.";
   const max = options.max ?? MAX_ATTEMPTS;
   const now = Date.now();
+  const nowIso = new Date(now).toISOString();
   const resetAt = new Date(now + WINDOW_MS).toISOString();
   try {
     const db = getDb();
-    const [row] = await db.select().from(rateLimits).where(eq(rateLimits.key, key)).limit(1);
-    if (!row || new Date(row.resetAt).getTime() <= now) {
-      await db
-        .insert(rateLimits)
-        .values({ key, count: 1, resetAt })
-        .onConflictDoUpdate({
-          target: rateLimits.key,
-          set: { count: 1, resetAt },
-        });
-      return;
-    }
-    const next = row.count + 1;
-    if (next > max) {
+    const result = await db.execute(sql`
+      INSERT INTO rate_limits (key, count, reset_at)
+      VALUES (${key}, 1, ${resetAt})
+      ON CONFLICT (key) DO UPDATE
+      SET
+        count = CASE
+          WHEN rate_limits.reset_at <= ${nowIso} THEN 1
+          ELSE rate_limits.count + 1
+        END,
+        reset_at = CASE
+          WHEN rate_limits.reset_at <= ${nowIso} THEN ${resetAt}
+          ELSE rate_limits.reset_at
+        END
+      RETURNING count
+    `);
+    if (countFromExecute(result) > max) {
       throw new Error(label);
     }
-    await db.update(rateLimits).set({ count: next }).where(eq(rateLimits.key, key));
   } catch (caught) {
     if (caught instanceof Error && caught.message === label) {
       throw caught;

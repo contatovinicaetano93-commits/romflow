@@ -203,7 +203,7 @@ export function TicketForm({
         {error ? <div className="form-error" style={{ margin: "0 24px 16px" }}>{error}</div> : null}
         <div className="form-footer">
           <span>{AREA_LABEL[area]} • {company.name}</span>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="form-footer-actions">
             <button type="button" className="secondary-button" onClick={onCancel}>
               Cancelar
             </button>

@@ -245,7 +245,7 @@ export function SettingsPage({
                       ? "Editar categoria"
                       : "Nova categoria"}
                 </h3>
-                <p>
+                <p className="modal-lead">
                   {editingCategory
                     ? "O nome novo vale nos formulários e nas solicitações já cadastradas."
                     : "Parâmetros essenciais do ROM Flow"}

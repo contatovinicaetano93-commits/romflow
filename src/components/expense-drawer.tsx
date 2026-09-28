@@ -379,7 +379,9 @@ export function ExpenseDrawer({
               <div className="section-header-row">
                 <h3>Status do chamado</h3>
               </div>
-              <p className="maintenance-status-hint">Escolha: em andamento, finalizado ou cancelado.</p>
+              <p className="maintenance-status-hint">
+                Atualize o chamado, devolva para ajuste ou recuse. O solicitante vê a devolução e a recusa na caixa.
+              </p>
               <MaintenanceStatusActions
                 expense={expense}
                 actions={actions}
@@ -392,8 +394,21 @@ export function ExpenseDrawer({
                   void runDirect(action);
                 }}
               />
-              {actions.includes("reject") || actions.includes("attach_proof") ? (
+              {actions.includes("docs") ||
+              actions.includes("resubmit") ||
+              actions.includes("reject") ||
+              actions.includes("attach_proof") ? (
                 <div className="finance-action-buttons" style={{ marginTop: 12 }}>
+                  {actions.includes("docs") ? (
+                    <button className="action-pill-btn return" type="button" disabled={busy} onClick={() => openModal("docs")}>
+                      <RotateCcw size={16} /> Devolver
+                    </button>
+                  ) : null}
+                  {actions.includes("resubmit") ? (
+                    <button className="action-pill-btn review" type="button" disabled={busy} onClick={() => openModal("resubmit")}>
+                      Reenviar
+                    </button>
+                  ) : null}
                   {actions.includes("attach_proof") ? (
                     <button className="action-pill-btn pay" type="button" disabled={busy} onClick={() => openModal("attach_proof")}>
                       Anexar recibo

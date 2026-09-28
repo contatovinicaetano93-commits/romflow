@@ -138,8 +138,9 @@ export async function deliverEmail(input: {
 export async function sendInviteEmail(
   invitation: Invitation,
   invitedByName: string,
+  plaintextToken: string,
 ): Promise<{ sent: boolean; error?: string }> {
-  const link = inviteUrl(invitation.token);
+  const link = inviteUrl(plaintextToken);
   const roleLabel = ROLE_LABEL[invitation.role];
   const result = await deliverEmail({
     kind: "invite",

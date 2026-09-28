@@ -179,6 +179,7 @@ type StoreValue = {
     companyIds: string[],
     areaIds: string[],
   ) => Promise<Invitation & { emailSent: boolean; emailError?: string }>;
+  rotateInviteLink: (invitationId: string) => Promise<string>;
   validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
@@ -586,6 +587,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (email: string, role: Role, companyIds: string[], areaIds: string[]) => {
       const result = await api<{
         invitation: Invitation;
+        plaintextToken: string;
         releasedUserId?: string | null;
         emailSent: boolean;
         emailError?: string;
@@ -593,24 +595,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         method: "POST",
         body: JSON.stringify({ email, role, companyIds, areaIds }),
       });
+      const invitation = { ...result.invitation, token: "" };
       setDb((current) => ({
         ...current,
         users: result.releasedUserId
           ? current.users.filter((item) => item.id !== result.releasedUserId)
           : current.users,
         invitations: [
-          result.invitation,
+          invitation,
           ...current.invitations.filter(
             (item) =>
-              item.id !== result.invitation.id &&
-              item.email.trim().toLowerCase() !== result.invitation.email.trim().toLowerCase(),
+              item.id !== invitation.id &&
+              item.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase(),
           ),
         ],
       }));
-      return { ...result.invitation, emailSent: result.emailSent, emailError: result.emailError };
+      return {
+        ...invitation,
+        token: result.plaintextToken,
+        emailSent: result.emailSent,
+        emailError: result.emailError,
+      };
     },
     [],
   );
+
+  const rotateInviteLink = useCallback(async (invitationId: string) => {
+    const result = await api<{ invitation: Invitation; plaintextToken: string }>("/api/invitations/rotate", {
+      method: "POST",
+      body: JSON.stringify({ invitationId }),
+    });
+    setDb((current) => ({
+      ...current,
+      invitations: current.invitations.map((item) =>
+        item.id === result.invitation.id ? { ...result.invitation, token: "" } : item,
+      ),
+    }));
+    return result.plaintextToken;
+  }, []);
 
   const validateInvite = useCallback(async (token: string) => {
     return api<{ invitation: Invitation; companies: Company[] }>(
@@ -811,6 +833,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createExpense,
       applyFinanceAction,
       inviteUser,
+      rotateInviteLink,
       validateInvite,
       acceptInvite,
       toggleUserStatus,
@@ -845,6 +868,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       findCompany,
       findUser,
       inviteUser,
+      rotateInviteLink,
       loadOps,
       login,
       logout,
