@@ -682,7 +682,11 @@ export function ExpenseDrawer({
                   <button
                     className={cls("primary-button", (modal === "reject" || modal === "cancel") && "destructive-button")}
                     type="submit"
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      (modal === "attach_proof" && !proof && !expense.payment_proof) ||
+                      (modal === "resubmit" && !proof && !expense.receipt)
+                    }
                   >
                     {busy ? "Confirmando..." : confirmLabel(modal)}
                   </button>

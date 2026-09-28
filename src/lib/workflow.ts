@@ -297,6 +297,44 @@ export function defaultPaymentDate(type: ExpenseType): string {
   return isoDatePlus(isReimbursement(type) ? 5 : 15);
 }
 
+export function assertFinancePayee(input: {
+  amount: number;
+  beneficiary_name: string;
+  payment_method: PaymentMethod;
+  pix_key: string;
+  bank_name: string;
+  agency: string;
+  account: string;
+  boleto_code: string;
+}): void {
+  const amount = roundMoney(input.amount);
+  if (!(amount > 0)) {
+    throw new Error("Informe um valor maior que zero.");
+  }
+  if (!input.beneficiary_name.trim()) {
+    throw new Error("Informe o beneficiário.");
+  }
+  switch (input.payment_method) {
+    case "pix":
+      if (!input.pix_key.trim()) {
+        throw new Error("Informe a chave PIX.");
+      }
+      break;
+    case "ted":
+      if (!input.bank_name.trim() || !input.agency.trim() || !input.account.trim()) {
+        throw new Error("Informe banco, agência e conta.");
+      }
+      break;
+    case "boleto":
+      if (!input.boleto_code.trim()) {
+        throw new Error("Informe o código do boleto.");
+      }
+      break;
+    default:
+      return assertNever(input.payment_method);
+  }
+}
+
 export function assertExpenseCreate(input: {
   title: string;
   description: string;
@@ -329,31 +367,16 @@ export function assertExpenseCreate(input: {
   if (input.area !== "financeiro") {
     return amount;
   }
-  if (!(amount > 0)) {
-    throw new Error("Informe um valor maior que zero.");
-  }
-  if (!input.beneficiary_name.trim()) {
-    throw new Error("Informe o beneficiário.");
-  }
-  switch (input.payment_method) {
-    case "pix":
-      if (!input.pix_key.trim()) {
-        throw new Error("Informe a chave PIX.");
-      }
-      break;
-    case "ted":
-      if (!input.bank_name.trim() || !input.agency.trim() || !input.account.trim()) {
-        throw new Error("Informe banco, agência e conta.");
-      }
-      break;
-    case "boleto":
-      if (!input.boleto_code.trim()) {
-        throw new Error("Informe o código do boleto.");
-      }
-      break;
-    default:
-      return assertNever(input.payment_method);
-  }
+  assertFinancePayee({
+    amount,
+    beneficiary_name: input.beneficiary_name,
+    payment_method: input.payment_method,
+    pix_key: input.pix_key,
+    bank_name: input.bank_name,
+    agency: input.agency,
+    account: input.account,
+    boleto_code: input.boleto_code,
+  });
   if (!input.receipt && input.receipt_justification.trim().length < 15) {
     throw new Error("Anexe o comprovante ou justifique com pelo menos 15 caracteres.");
   }
@@ -465,7 +488,7 @@ export function isAdminInbox(expense: Expense): boolean {
     case "rh":
       return expense.status === "em_analise";
     case "compras":
-      return expense.status === "em_analise" || expense.status === "em_andamento";
+      return expense.status === "em_analise" || expense.status === "aprovada" || expense.status === "em_andamento";
     case "manutencao":
       return expense.status === "aberta" || expense.status === "em_andamento";
     default:

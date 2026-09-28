@@ -1058,6 +1058,86 @@ body {
   .resubmit-payment-fields .payment-options {
     grid-template-columns: 1fr;
   }
+
+  :root {
+    --bottom-nav-height: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-nav {
+    height: var(--bottom-nav-height);
+    min-height: 66px;
+    padding: 6px 7px env(safe-area-inset-bottom, 0px);
+  }
+
+  .expense-form-page .form-footer {
+    bottom: var(--bottom-nav-height);
+  }
+
+  .refresh-fab {
+    bottom: calc(var(--bottom-nav-height) + 12px);
+  }
+
+  .app-shell {
+    padding-bottom: calc(var(--bottom-nav-height) + 8px);
+  }
+
+  .input-with-icon input,
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea,
+  .form-step > label textarea,
+  .action-modal input,
+  .action-modal select,
+  .action-modal textarea,
+  .table-search input {
+    font-size: 16px;
+  }
+
+  .table-search {
+    min-height: 44px;
+    height: auto;
+  }
+
+  .icon-button,
+  .top-header .notification-button,
+  .requester-avatar,
+  .drawer-header .close-btn,
+  .settings-row-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .header-popover button {
+    min-height: 44px;
+  }
+
+  .input-with-icon button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .settings-list em {
+    font-size: 12px;
+  }
+
+  .details-drawer {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .drawer-body {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .sidebar {
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .report-category > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-right: 12px;
+  }
 }
 
 .payment-credentials {
