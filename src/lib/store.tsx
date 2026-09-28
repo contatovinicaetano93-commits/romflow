@@ -13,6 +13,7 @@ import {
 } from "react";
 import { canAccessCompany } from "./access";
 import { isTombstoneEmail } from "./user-directory";
+import { companyInbox } from "./workflow";
 import type {
   Category,
   Company,
@@ -53,7 +54,32 @@ const EMPTY_DB: Database = {
   expenses: [],
   auditLogs: [],
   emailLogs: [],
+  inboxCounts: {},
 };
+
+function patchPickerInbox(
+  user: User | null,
+  current: Expense[],
+  counts: Record<string, number>,
+  next: Expense,
+): { items: Expense[]; counts: Record<string, number> } {
+  const nextCounts = { ...counts };
+  const existing = current.find((item) => item.id === next.id);
+  if (existing && user) {
+    if (companyInbox(user, [existing], existing.company).length > 0) {
+      nextCounts[existing.company] = Math.max(0, (nextCounts[existing.company] ?? 1) - 1);
+    }
+  }
+  const belongs = Boolean(user && companyInbox(user, [next], next.company).length > 0);
+  if (belongs) {
+    nextCounts[next.company] = (nextCounts[next.company] ?? 0) + 1;
+  }
+  const without = current.filter((item) => item.id !== next.id);
+  return {
+    items: belongs ? [next, ...without] : without,
+    counts: nextCounts,
+  };
+}
 
 function syncSentryUser(user: User | null) {
   if (!user) {
@@ -155,6 +181,7 @@ type StoreValue = {
   user: User | null;
   company: Company | null;
   pickerInbox: Expense[];
+  inboxCounts: Record<string, number>;
   workingCompanyId: string | null;
   login: (email: string, password: string) => Promise<User>;
   bootstrapAdmin: (name: string, email: string, password: string) => Promise<User>;
@@ -179,7 +206,9 @@ type StoreValue = {
     companyIds: string[],
     areaIds: string[],
   ) => Promise<Invitation & { emailSent: boolean; emailError?: string }>;
-  rotateInviteLink: (invitationId: string) => Promise<string>;
+  rotateInviteLink: (
+    invitationId: string,
+  ) => Promise<{ token: string; emailSent: boolean; emailError?: string; invitation: Invitation }>;
   validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
@@ -217,6 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [pickerInbox, setPickerInbox] = useState<Expense[]>([]);
+  const [inboxCounts, setInboxCounts] = useState<Record<string, number>>({});
   const [workingCompanyId, setWorkingCompanyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const selectSeq = useRef(0);
@@ -233,6 +263,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCompany(null);
       setWorkingCompanyId(null);
       setPickerInbox([]);
+      setInboxCounts({});
       setDb(EMPTY_DB);
       setNotice("Sessão expirada. Entre de novo.");
     };
@@ -244,6 +275,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyBootstrap = useCallback((snapshot: Database | null | undefined): boolean => {
     if (snapshot) {
       setPickerInbox(snapshot.expenses);
+      setInboxCounts(snapshot.inboxCounts ?? {});
       setDb((current) => ({
         revision: snapshot.revision,
         companies: snapshot.companies,
@@ -253,11 +285,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         expenses: current.expenses,
         auditLogs: current.auditLogs,
         emailLogs: current.emailLogs,
+        inboxCounts: snapshot.inboxCounts ?? {},
       }));
       return true;
     }
     if (snapshot === null) {
       setPickerInbox([]);
+      setInboxCounts({});
       setDb(EMPTY_DB);
       return true;
     }
@@ -268,6 +302,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const active = nextUser === undefined ? user : nextUser;
     if (!active) {
       setPickerInbox([]);
+      setInboxCounts({});
       setDb(EMPTY_DB);
       return;
     }
@@ -318,6 +353,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refreshDirectory(nextUser);
       } catch {
         setPickerInbox([]);
+        setInboxCounts({});
         setDb(EMPTY_DB);
       }
     },
@@ -333,6 +369,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCompany(null);
       setWorkingCompanyId(null);
       setPickerInbox([]);
+      setInboxCounts({});
       setDb(EMPTY_DB);
       return;
     }
@@ -346,6 +383,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await refreshDirectory(session.user);
       } catch {
         setPickerInbox([]);
+        setInboxCounts({});
         setDb(EMPTY_DB);
       }
     }
@@ -395,6 +433,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           } catch {
             if (!cancelled) {
               setPickerInbox([]);
+              setInboxCounts({});
               setDb(EMPTY_DB);
             }
           }
@@ -404,6 +443,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setUser(null);
           syncSentryUser(null);
           setPickerInbox([]);
+          setInboxCounts({});
           setDb(EMPTY_DB);
         }
       } finally {
@@ -457,6 +497,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCompany(null);
     setWorkingCompanyId(null);
     setPickerInbox([]);
+    setInboxCounts({});
     setDb(EMPTY_DB);
   }, []);
 
@@ -544,16 +585,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: [result.expense, ...current.expenses.filter((item) => item.id !== result.expense.id)],
       }));
-      setPickerInbox((current) => [
-        result.expense,
-        ...current.filter((item) => item.id !== result.expense.id),
-      ]);
+      setPickerInbox((current) => {
+        const patched = patchPickerInbox(user, current, inboxCounts, result.expense);
+        setInboxCounts(patched.counts);
+        return patched.items;
+      });
       if (input.company) {
         void refreshCompany(input.company).catch(() => undefined);
       }
       return result.expense;
     },
-    [refreshCompany],
+    [inboxCounts, refreshCompany, user],
   );
 
   const applyFinanceAction = useCallback(
@@ -574,15 +616,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
       }));
-      setPickerInbox((current) =>
-        current.map((item) => (item.id === result.expense.id ? result.expense : item)),
-      );
+      setPickerInbox((current) => {
+        const patched = patchPickerInbox(user, current, inboxCounts, result.expense);
+        setInboxCounts(patched.counts);
+        return patched.items;
+      });
       const companyId = result.expense.company;
       if (companyId) {
         void refreshCompany(companyId).catch(() => undefined);
       }
     },
-    [refreshCompany],
+    [inboxCounts, refreshCompany, user],
   );
 
   const inviteUser = useCallback(
@@ -623,17 +667,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const rotateInviteLink = useCallback(async (invitationId: string) => {
-    const result = await api<{ invitation: Invitation; plaintextToken: string }>("/api/invitations/rotate", {
+    const result = await api<{
+      invitation: Invitation;
+      plaintextToken: string;
+      emailSent: boolean;
+      emailError?: string;
+    }>("/api/invitations/rotate", {
       method: "POST",
       body: JSON.stringify({ invitationId }),
     });
+    const invitation = { ...result.invitation, token: "" };
     setDb((current) => ({
       ...current,
       invitations: current.invitations.map((item) =>
-        item.id === result.invitation.id ? { ...result.invitation, token: "" } : item,
+        item.id === invitation.id ? invitation : item,
       ),
     }));
-    return result.plaintextToken;
+    return {
+      token: result.plaintextToken,
+      emailSent: result.emailSent,
+      emailError: result.emailError,
+      invitation,
+    };
   }, []);
 
   const validateInvite = useCallback(async (token: string) => {
@@ -822,6 +877,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       user,
       company,
       pickerInbox,
+      inboxCounts,
       workingCompanyId,
       login,
       bootstrapAdmin,
@@ -879,6 +935,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       needsSetup,
       notice,
       pickerInbox,
+      inboxCounts,
       ready,
       selectCompany,
       switchCompany,

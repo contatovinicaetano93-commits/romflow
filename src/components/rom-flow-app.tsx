@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell, canAccessScreen, isGroupAdminScreen } from "@/components/app-shell";
+import { AppShell, canAccessScreen, isGroupAdminScreen, isSearchableScreen } from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
 import { CompanySelect } from "@/components/company-select";
 import { Dashboard } from "@/components/dashboard";
@@ -82,6 +82,9 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
       }
       setScreen(next);
       closePopovers();
+      if (!isSearchableScreen(next)) {
+        setSearch("");
+      }
       if (next === "audit") {
         void loadOps().catch(() => undefined);
       }
@@ -172,6 +175,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             user={store.user}
             companies={accessibleCompanies}
             expenses={store.pickerInbox}
+            inboxCounts={store.inboxCounts}
             onSelect={(id) => {
               setPickingCompany(false);
               void store.selectCompany(id);
@@ -230,6 +234,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             user={store.user!}
             expenses={expenses}
             categories={store.db.categories}
+            search={search}
+            onSearch={setSearch}
             onNavigate={navigate}
             onOpenExpense={setSelected}
           />
@@ -314,6 +320,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             mode="approvals"
             expenses={expenses}
             users={store.db.users}
+            search={search}
+            onSearch={setSearch}
             onOpen={setSelected}
           />
         );
@@ -323,11 +331,13 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             mode="payments"
             expenses={expenses}
             users={store.db.users}
+            search={search}
+            onSearch={setSearch}
             onOpen={setSelected}
           />
         );
       case "reports":
-        return <ReportsPage expenses={expenses} categories={store.db.categories} />;
+        return <ReportsPage expenses={expenses} categories={store.db.categories} search={search} onSearch={setSearch} />;
       case "users":
         return (
           <UsersPage
@@ -337,6 +347,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             companyId={store.company?.id ?? null}
             companyName={store.company?.name ?? null}
             currentUserId={store.user!.id}
+            search={search}
+            onSearch={setSearch}
             onInvite={store.inviteUser}
             onRotateInvite={store.rotateInviteLink}
             onUpdateUser={store.updateUserAccess}
@@ -348,7 +360,15 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           />
         );
       case "audit":
-        return <AuditPage logs={store.db.auditLogs} emailLogs={store.db.emailLogs} users={store.db.users} />;
+        return (
+          <AuditPage
+            logs={store.db.auditLogs}
+            emailLogs={store.db.emailLogs}
+            users={store.db.users}
+            search={search}
+            onSearch={setSearch}
+          />
+        );
       case "settings":
         return (
           <SettingsPage
@@ -429,6 +449,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
           setProfileOpen((value) => !value);
         }}
         onToggleMenu={() => setMenuOpen((value) => !value)}
+        onOpenExpense={setSelected}
       >
         <div key={viewEpoch} className="screen-refresh-root">
           {renderScreen(visibleScreen)}

@@ -1192,4 +1192,32 @@ body {
   font-size: 13px;
 }
 
+.mobile-only-search {
+  display: none;
+}
+
+.donut-legend {
+  flex-wrap: wrap;
+}
+
+.donut-legend i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+@media (max-width: 700px) {
+  .mobile-only-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  .mobile-only-search input {
+    font-size: 16px;
+  }
+}
+
 

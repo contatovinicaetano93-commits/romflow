@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Sparkles, Wallet } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Search, Sparkles, Wallet } from "lucide-react";
 import { useState } from "react";
-import { CATEGORY_COLOR, KINDNESS_PHRASES, money } from "@/lib/format";
+import { CATEGORY_COLOR, KINDNESS_PHRASES, matchesExpenseSearch, money } from "@/lib/format";
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
 import { newRequestScreen } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
@@ -40,6 +40,8 @@ export function Dashboard({
   user,
   expenses,
   categories,
+  search = "",
+  onSearch,
   onNavigate,
   onOpenExpense,
 }: {
@@ -48,6 +50,8 @@ export function Dashboard({
   user: User;
   expenses: Expense[];
   categories: Category[];
+  search?: string;
+  onSearch?: (value: string) => void;
   onNavigate: (screen: Screen) => void;
   onOpenExpense: (expense: Expense) => void;
 }) {
@@ -154,6 +158,10 @@ export function Dashboard({
       ? "—"
       : `${currentMonth >= previousMonth ? "+" : ""}${(((currentMonth - previousMonth) / previousMonth) * 100).toFixed(1).replace(".", ",")}%`;
   const linePath = chartLine(monthValues, maxMonth);
+  const activity = (search.trim() ? expenses.filter((item) => matchesExpenseSearch(item, search)) : expenses)
+    .slice()
+    .sort((a, b) => b.updated.localeCompare(a.updated) || b.created.localeCompare(a.created))
+    .slice(0, search.trim() ? 20 : 6);
 
   return (
     <div className="page-stack">
@@ -199,6 +207,16 @@ export function Dashboard({
           </div>
         )}
       </section>
+      {onSearch ? (
+        <div className="table-search mobile-only-search">
+          <Search size={16} />
+          <input
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Buscar solicitações nesta empresa"
+          />
+        </div>
+      ) : null}
       <section className="kpi-grid">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
@@ -292,18 +310,24 @@ export function Dashboard({
         <article className="panel activity-panel">
           <header className="panel-header">
             <div>
-              <h3>Atividade recente</h3>
-              <p>Atualizações do seu fluxo</p>
+              <h3>{search.trim() ? "Resultados da busca" : "Atividade recente"}</h3>
+              <p>{search.trim() ? "Solicitações que correspondem à busca" : "Atualizações do seu fluxo"}</p>
             </div>
           </header>
-          {expenses.length === 0 ? (
+          {activity.length === 0 ? (
             <div className="empty-state">
-              <strong>Seu fluxo ainda não possui movimentações.</strong>
-              <span>Crie a primeira solicitação para começar.</span>
+              <strong>
+                {search.trim() ? "Nenhuma solicitação encontrada." : "Seu fluxo ainda não possui movimentações."}
+              </strong>
+              <span>
+                {search.trim()
+                  ? "Tente outro termo ou limpe a busca."
+                  : "Crie a primeira solicitação para começar."}
+              </span>
             </div>
           ) : (
             <div className="activity-list">
-              {expenses.slice(0, 6).map((item) => (
+              {activity.map((item) => (
                 <button key={item.id} type="button" onClick={() => onOpenExpense(item)}>
                   <span className="activity-avatar">
                     {item.title.slice(0, 2).toUpperCase()}

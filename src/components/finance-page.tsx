@@ -8,7 +8,7 @@ import {
   Search,
   Wallet,
 } from "lucide-react";
-import { AREA_LABEL, daysUntil, formatDate, money, shortId } from "@/lib/format";
+import { AREA_LABEL, daysUntil, formatDate, matchesExpenseSearch, money, shortId } from "@/lib/format";
 import type { Expense, User } from "@/lib/types";
 import { isAdminInbox, isWaitingPayment } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
@@ -20,16 +20,22 @@ export function FinancePage({
   mode,
   expenses,
   users,
+  search = "",
+  onSearch,
   onOpen,
 }: {
   mode: "approvals" | "payments";
   expenses: Expense[];
   users: User[];
+  search?: string;
+  onSearch?: (value: string) => void;
   onOpen: (expense: Expense) => void;
 }) {
   const [approvalTab, setApprovalTab] = useState<ApprovalTab>("review");
   const [paymentTab, setPaymentTab] = useState<PaymentTab>("waiting");
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const query = onSearch ? search : localQuery;
+  const setQuery = onSearch ?? setLocalQuery;
 
   const queue = useMemo(() => expenses.filter((item) => isAdminInbox(item)), [expenses]);
   const returned = useMemo(() => expenses.filter((item) => item.status === "devolvido"), [expenses]);
@@ -79,11 +85,7 @@ export function FinancePage({
         }
       }
     }
-    return source.filter((item) =>
-      `${item.title} ${item.beneficiary_name} ${AREA_LABEL[item.area]}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-    );
+    return source.filter((item) => matchesExpenseSearch(item, query));
   }, [approvalTab, decided, mode, paymentTab, paid, query, queue, rejected, returned, waitingPay]);
 
   return (

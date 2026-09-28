@@ -16,12 +16,18 @@ export function AuditPage({
   logs,
   emailLogs,
   users,
+  search = "",
+  onSearch,
 }: {
   logs: AuditLog[];
   emailLogs: EmailLog[];
   users: User[];
+  search?: string;
+  onSearch?: (value: string) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const query = onSearch ? search : localQuery;
+  const setQuery = onSearch ?? setLocalQuery;
   const filtered = useMemo(
     () =>
       logs.filter((item) => {

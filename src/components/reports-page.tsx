@@ -1,7 +1,7 @@
 "use client";
 
-import { BarChart3, CheckCircle2, PieChart, Wallet } from "lucide-react";
-import { STATUS_LABEL, money } from "@/lib/format";
+import { BarChart3, CheckCircle2, PieChart, Search, Wallet } from "lucide-react";
+import { STATUS_COLOR, STATUS_LABEL, matchesExpenseSearch, money } from "@/lib/format";
 import type { Category, Expense, ExpenseStatus } from "@/lib/types";
 
 const STATUS_ORDER: ExpenseStatus[] = [
@@ -15,29 +15,58 @@ const STATUS_ORDER: ExpenseStatus[] = [
   "cancelada",
 ];
 
+function donutGradient(slices: Array<{ color: string; pct: number }>): string {
+  if (slices.length === 0) {
+    return "conic-gradient(#27272a 0 100%)";
+  }
+  let cursor = 0;
+  const stops: string[] = [];
+  slices.forEach((slice, index) => {
+    const start = cursor;
+    const end = index === slices.length - 1 ? 100 : Math.min(100, cursor + slice.pct);
+    stops.push(`${slice.color} ${start}% ${end}%`);
+    cursor = end;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+}
+
 export function ReportsPage({
   expenses,
   categories: categoryOptions,
+  search = "",
+  onSearch,
 }: {
   expenses: Expense[];
   categories: Category[];
+  search?: string;
+  onSearch?: (value: string) => void;
 }) {
-  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
-  const paid = expenses.filter((item) => Boolean(item.payment_proof));
+  const visible = expenses.filter((item) => matchesExpenseSearch(item, search));
+  const total = visible.reduce((sum, item) => sum + item.amount, 0);
+  const paid = visible.filter((item) => Boolean(item.payment_proof));
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
-  const ticket = expenses.length ? total / expenses.length : 0;
-  const categories = categoryOptions.map((item) => {
-    const value = expenses
-      .filter((expense) => expense.category === item.name)
-      .reduce((sum, expense) => sum + expense.amount, 0);
-    return { name: item.name, color: item.color, value, pct: total ? Math.round((value / total) * 100) : 0 };
-  });
+  const ticket = visible.length ? total / visible.length : 0;
+  const categories = categoryOptions
+    .map((item) => {
+      const value = visible
+        .filter((expense) => expense.category === item.name)
+        .reduce((sum, expense) => sum + expense.amount, 0);
+      return { name: item.name, color: item.color, value, pct: total ? Math.round((value / total) * 100) : 0 };
+    })
+    .filter((item) => item.value > 0);
   const byStatus = STATUS_ORDER.map((status) => ({
     status,
-    count: expenses.filter((item) => item.status === status).length,
+    count: visible.filter((item) => item.status === status).length,
   }));
-  const paidPct = expenses.length ? Math.round((paid.length / expenses.length) * 100) : 0;
-  const isEmpty = expenses.length === 0;
+  const slices = byStatus
+    .filter((item) => item.count > 0)
+    .map((item) => ({
+      status: item.status,
+      color: STATUS_COLOR[item.status],
+      pct: visible.length ? (item.count / visible.length) * 100 : 0,
+      count: item.count,
+    }));
+  const isEmpty = visible.length === 0;
 
   return (
     <div className="page-stack">
@@ -48,6 +77,16 @@ export function ReportsPage({
           <p>Analise o volume, a execução e a distribuição das despesas.</p>
         </div>
       </section>
+      {onSearch ? (
+        <div className="table-search mobile-only-search">
+          <Search size={16} />
+          <input
+            value={search}
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Filtrar relatórios por solicitação"
+          />
+        </div>
+      ) : null}
       <section className="report-kpis">
         <article>
           <Wallet size={18} />
@@ -74,7 +113,7 @@ export function ReportsPage({
           <PieChart size={18} />
           <span>
             <small>Solicitações</small>
-            <strong>{expenses.length}</strong>
+            <strong>{visible.length}</strong>
           </span>
         </article>
       </section>
@@ -88,8 +127,12 @@ export function ReportsPage({
           </header>
           {isEmpty ? (
             <div className="empty-state">
-              <strong>Nenhuma despesa para distribuir.</strong>
-              <span>Este relatório fica vazio até existir a primeira solicitação.</span>
+              <strong>{search.trim() ? "Nenhum resultado para a busca." : "Nenhuma despesa para distribuir."}</strong>
+              <span>
+                {search.trim()
+                  ? "Ajuste o termo para ver a distribuição."
+                  : "Este relatório fica vazio até existir a primeira solicitação."}
+              </span>
             </div>
           ) : (
             <div className="report-category">
@@ -114,32 +157,27 @@ export function ReportsPage({
           </header>
           {isEmpty ? (
             <div className="empty-state">
-              <strong>Fluxo ainda sem solicitações.</strong>
-              <span>As etapas aparecem conforme o negócio começar a operar.</span>
+              <strong>{search.trim() ? "Nenhum resultado para a busca." : "Fluxo ainda sem solicitações."}</strong>
+              <span>
+                {search.trim()
+                  ? "Ajuste o termo para ver as etapas."
+                  : "As etapas aparecem conforme o negócio começar a operar."}
+              </span>
             </div>
           ) : (
             <>
-              <div
-                className="donut"
-                style={{
-                  background: `conic-gradient(#10b981 0 ${paidPct}%, #6366f1 ${paidPct}% ${Math.min(paidPct + 25, 100)}%, #f59e0b ${Math.min(paidPct + 25, 100)}% 100%)`,
-                }}
-              >
+              <div className="donut" style={{ background: donutGradient(slices) }}>
                 <span>
-                  <strong>{paidPct}%</strong>
+                  <strong>{visible.length}</strong>
                   <small>Total</small>
                 </span>
               </div>
               <div className="donut-legend">
-                <span>
-                  <i className="emerald" /> Pago
-                </span>
-                <span>
-                  <i className="violet" /> Em fluxo
-                </span>
-                <span>
-                  <i className="amber" /> Pendências
-                </span>
+                {slices.map((item) => (
+                  <span key={item.status}>
+                    <i style={{ background: item.color }} /> {STATUS_LABEL[item.status]}
+                  </span>
+                ))}
               </div>
               {byStatus.map((item) => (
                 <div

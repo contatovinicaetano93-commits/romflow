@@ -2,7 +2,7 @@
 
 import { Filter, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { AREA_LABEL, money, shortId } from "@/lib/format";
+import { AREA_LABEL, matchesExpenseSearch, money, shortId } from "@/lib/format";
 import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/types";
 import { allowedActions, newRequestScreen } from "@/lib/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
@@ -54,9 +54,7 @@ export function ExpenseList({
   const filtered = useMemo(
     () =>
       expenses.filter((item) => {
-        const matchesSearch = `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]}`
-          .toLowerCase()
-          .includes(search.toLowerCase());
+        const matchesSearch = matchesExpenseSearch(item, search);
         const matchesStatus = status === "todos" || item.status === status;
         const matchesArea = areaFilter === "todas" || item.area === areaFilter;
         return matchesSearch && matchesStatus && matchesArea;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
@@ -167,6 +167,54 @@ export function isGroupAdminScreen(screen: Screen): boolean {
   return screen === "settings" || screen === "users" || screen === "audit";
 }
 
+export function isSearchableScreen(screen: Screen): boolean {
+  switch (screen) {
+    case "dashboard":
+    case "expenses":
+    case "my-expenses":
+    case "approvals":
+    case "payments":
+    case "reports":
+    case "users":
+    case "audit":
+      return true;
+    case "new-financeiro":
+    case "new-manutencao":
+    case "new-compras":
+    case "new-rh":
+    case "settings":
+      return false;
+    default:
+      return assertNever(screen);
+  }
+}
+
+function searchPlaceholderFor(screen: Screen): string {
+  switch (screen) {
+    case "users":
+      return "Buscar usuários e convites";
+    case "audit":
+      return "Buscar auditoria e e-mails";
+    case "reports":
+      return "Filtrar relatórios por solicitação";
+    case "approvals":
+    case "payments":
+      return "Buscar na fila";
+    case "dashboard":
+      return "Buscar solicitações nesta empresa";
+    case "expenses":
+    case "my-expenses":
+    case "new-financeiro":
+    case "new-manutencao":
+    case "new-compras":
+    case "new-rh":
+    case "settings":
+      return "Buscar solicitações, beneficiários, categorias";
+    default:
+      return assertNever(screen);
+  }
+}
+
 export function AppShell({
   role,
   company,
@@ -188,6 +236,7 @@ export function AppShell({
   onToggleNotifications,
   onToggleProfile,
   onToggleMenu,
+  onOpenExpense,
   children,
 }: {
   role: Role;
@@ -210,14 +259,33 @@ export function AppShell({
   onToggleNotifications: () => void;
   onToggleProfile: () => void;
   onToggleMenu: () => void;
+  onOpenExpense?: (expense: Expense) => void;
   children: ReactNode;
 }) {
   const allItems = navItemsFor(user);
   const items = company ? allItems : allItems.filter((item) => isGroupAdminScreen(item.screen));
   const tabs = company ? bottomNavItems(user) : items.slice(0, 4);
-  const recent = expenses.slice(0, 4);
+  const recent = [...expenses]
+    .sort((a, b) => b.updated.localeCompare(a.updated) || b.created.localeCompare(a.created))
+    .slice(0, 6);
   const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const showSearch = isSearchableScreen(screen);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!showSearch) {
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showSearch]);
 
   function titleFor(current: Screen): string {
     switch (current) {
@@ -326,15 +394,19 @@ export function AppShell({
               <h1>{titleFor(screen)}</h1>
             </div>
           </div>
-          <div className="global-search">
-            <Search size={16} />
-            <input
-              value={search}
-              onChange={(event) => onSearch(event.target.value)}
-              placeholder="Buscar solicitações, beneficiários, categorias"
-            />
-            <kbd>⌘ K</kbd>
-          </div>
+          {showSearch ? (
+            <div className="global-search">
+              <Search size={16} />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(event) => onSearch(event.target.value)}
+                placeholder={searchPlaceholderFor(screen)}
+                aria-label={searchPlaceholderFor(screen)}
+              />
+              <kbd>⌘ K</kbd>
+            </div>
+          ) : null}
           <div className="header-actions">
             <div className="popover-wrap">
               <button
@@ -355,7 +427,17 @@ export function AppShell({
                     <p>Nenhuma notificação no momento.</p>
                   ) : (
                     recent.map((item) => (
-                      <button key={item.id} type="button" onClick={() => onNavigate("expenses")}>
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (onOpenExpense) {
+                            onOpenExpense(item);
+                            return;
+                          }
+                          onNavigate("expenses");
+                        }}
+                      >
                         <span className="activity-dot" />
                         <span>
                           <strong>{item.title}</strong>

@@ -4,36 +4,10 @@ import { getDb } from "@/lib/db";
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
-type Bucket = { count: number; resetAt: number };
-
-const buckets = new Map<string, Bucket>();
-
-function prune(now: number) {
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) {
-      buckets.delete(key);
-    }
-  }
-}
-
 export function clientKey(request: Request, extra: string): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const ip = forwarded || request.headers.get("x-real-ip") || "unknown";
   return `${ip}:${extra.trim().toLowerCase()}`;
-}
-
-function assertMemoryLimit(key: string, label: string, max = MAX_ATTEMPTS): void {
-  const now = Date.now();
-  prune(now);
-  const current = buckets.get(key);
-  if (!current || current.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return;
-  }
-  current.count += 1;
-  if (current.count > max) {
-    throw new Error(label);
-  }
 }
 
 function countFromExecute(result: unknown): number {
@@ -57,6 +31,7 @@ export async function assertRateLimit(
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const resetAt = new Date(now + WINDOW_MS).toISOString();
+  let count: number;
   try {
     const db = getDb();
     const result = await db.execute(sql`
@@ -74,14 +49,15 @@ export async function assertRateLimit(
         END
       RETURNING count
     `);
-    if (countFromExecute(result) > max) {
-      throw new Error(label);
-    }
+    count = countFromExecute(result);
   } catch (caught) {
     if (caught instanceof Error && caught.message === label) {
       throw caught;
     }
-    assertMemoryLimit(key, label, max);
+    throw new Error("Não foi possível validar o limite de tentativas. Tente novamente em instantes.");
+  }
+  if (count > max) {
+    throw new Error(label);
   }
 }
 

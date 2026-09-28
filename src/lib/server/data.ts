@@ -395,7 +395,8 @@ const INBOX_STATUSES = [
   "finalizada",
 ] as const;
 
-const INBOX_PER_COMPANY = 40;
+const INBOX_SAMPLE_PER_COMPANY = 8;
+const INVITE_TTL_MS = 30 * 86_400_000;
 
 export function emptySnapshot(): Database {
   return {
@@ -407,6 +408,7 @@ export function emptySnapshot(): Database {
     expenses: [],
     auditLogs: [],
     emailLogs: [],
+    inboxCounts: {},
   };
 }
 
@@ -471,14 +473,16 @@ function visibleCompaniesFor(actor: User, companyRows: Array<typeof companies.$i
     : companyRows.filter((item) => actor.companyIds.includes(item.id));
 }
 
-async function loadInboxExpenses(actor: User): Promise<Expense[]> {
+async function loadInboxExpenses(
+  actor: User,
+): Promise<{ items: Expense[]; counts: Record<string, number> }> {
   const filters = [inArray(expenses.status, [...INBOX_STATUSES])];
   if (actor.role === "solicitante") {
     filters.push(eq(expenses.requesterId, actor.id));
   } else if (!isMaster(actor.role) && actor.companyIds.length > 0) {
     filters.push(inArray(expenses.companyId, actor.companyIds));
   } else if (!isMaster(actor.role)) {
-    return [];
+    return { items: [], counts: {} };
   }
   const rows = await getDb()
     .select({
@@ -493,7 +497,7 @@ async function loadInboxExpenses(actor: User): Promise<Expense[]> {
     .from(expenses)
     .where(and(...filters))
     .orderBy(desc(expenses.created));
-  const counts = new Map<string, number>();
+  const counts: Record<string, number> = {};
   const inbox: Expense[] = [];
   for (const row of rows) {
     const expense = mapInboxExpense(row);
@@ -505,14 +509,13 @@ async function loadInboxExpenses(actor: User): Promise<Expense[]> {
     if (!relevant) {
       continue;
     }
-    const count = counts.get(expense.company) ?? 0;
-    if (count >= INBOX_PER_COMPANY) {
-      continue;
+    const count = counts[expense.company] ?? 0;
+    counts[expense.company] = count + 1;
+    if (count < INBOX_SAMPLE_PER_COMPANY) {
+      inbox.push(expense);
     }
-    counts.set(expense.company, count + 1);
-    inbox.push(expense);
   }
-  return inbox;
+  return { items: inbox, counts };
 }
 
 export type CompanyWorkset = {
@@ -538,11 +541,12 @@ export async function getBootstrapSnapshot(actor: User): Promise<Database> {
     revision: 1,
     companies: visibleCompaniesFor(actor, companyRows).map(mapCompany),
     categories: categoryRows.map(mapCategory),
-    users: usersForSnapshot(actor, allUsers, inbox),
+    users: usersForSnapshot(actor, allUsers, inbox.items),
     invitations: allInvites,
-    expenses: inbox,
+    expenses: inbox.items,
     auditLogs: [],
     emailLogs: [],
+    inboxCounts: inbox.counts,
   };
 }
 
@@ -947,7 +951,7 @@ export async function createInvitationRecord(
     areaIds: resolvedAreas,
     invitedBy: actor.id,
     created: new Date().toISOString(),
-    expires: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    expires: new Date(Date.now() + INVITE_TTL_MS).toISOString(),
     accepted: false,
   });
   await db.insert(invitations).values({
@@ -1042,12 +1046,13 @@ export async function rotateInvitationLink(
   if (!row || row.accepted) {
     throw new Error("Convite inválido ou já utilizado.");
   }
-  if (new Date(row.expires).getTime() < Date.now()) {
-    throw new Error("Convite expirado. Solicite um novo convite ao administrador.");
-  }
   const plaintextToken = inviteToken();
-  await db.update(invitations).set({ token: hashToken(plaintextToken) }).where(eq(invitations.id, invitationId));
-  return { invitation: await invitationFromRow(row), plaintextToken };
+  const expires = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+  await db
+    .update(invitations)
+    .set({ token: hashToken(plaintextToken), expires })
+    .where(eq(invitations.id, invitationId));
+  return { invitation: await invitationFromRow({ ...row, expires }), plaintextToken };
 }
 
 function companyIdsForAcceptedInvite(role: Role, invitedCompanyIds: string[]): string[] {
@@ -1190,6 +1195,9 @@ export async function updateUserAccessRecord(
     `${row.role} | ${previousLinks.map((item) => item.companyId).join(",") || "nenhuma"}`,
     `${resolvedRole} | ${resolvedCompanies.join(",")} | ${resolvedAreas.join(",")}`,
   );
+  if (actor.id !== userId) {
+    await bumpSessionVersion(userId);
+  }
   const updated = await loadUser(userId);
   if (!updated) {
     throw new Error("Usuário não encontrado.");

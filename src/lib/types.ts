@@ -220,6 +220,7 @@ export type Database = {
   expenses: Expense[];
   auditLogs: AuditLog[];
   emailLogs: EmailLog[];
+  inboxCounts?: Record<string, number>;
 };
 
 export function assertNever(value: never): never {

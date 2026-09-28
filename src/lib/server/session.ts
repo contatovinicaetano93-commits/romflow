@@ -92,6 +92,14 @@ export async function clearSession(): Promise<void> {
   jar.delete(COOKIE);
 }
 
+export async function invalidateAndClearSession(): Promise<void> {
+  const session = await readSession();
+  if (session?.userId) {
+    await bumpSessionVersion(session.userId);
+  }
+  await clearSession();
+}
+
 async function readSession(): Promise<{ userId: string; sv: number } | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
@@ -238,6 +246,30 @@ async function grantAllCompaniesToMasters(): Promise<void> {
 }
 
 let seedPromise: Promise<void> | null = null;
+const LEGACY_STATUS_ROLES_MIGRATION = "legacy_status_roles_v1";
+
+function executeHasRow(result: unknown): boolean {
+  if (Array.isArray(result) && result.length > 0) {
+    return true;
+  }
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows: unknown[] }).rows;
+    return Array.isArray(rows) && rows.length > 0;
+  }
+  return false;
+}
+
+async function hasAppliedMigration(
+  db: ReturnType<typeof getDb>,
+  id: string,
+): Promise<boolean> {
+  try {
+    const result = await db.execute(sql`SELECT 1 FROM schema_migrations WHERE id = ${id} LIMIT 1`);
+    return executeHasRow(result);
+  } catch {
+    return false;
+  }
+}
 
 async function ensureSeededOnce(): Promise<void> {
   const db = getDb();
@@ -256,16 +288,12 @@ async function ensureSeededOnce(): Promise<void> {
   }
 
   try {
-    await db.execute(sql`UPDATE users SET role = 'master' WHERE role = 'admin'`);
-    await db.execute(sql`UPDATE users SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
-    await db.execute(sql`UPDATE invitations SET role = 'master' WHERE role = 'admin'`);
-    await db.execute(sql`UPDATE invitations SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
-    await db.execute(sql`UPDATE expenses SET area = 'financeiro' WHERE area IS NULL OR area = ''`);
-    await db.execute(sql`UPDATE expenses SET status = 'em_analise' WHERE status = 'enviada'`);
-    await db.execute(sql`UPDATE expenses SET status = 'devolvido' WHERE status = 'aguardando_documentacao'`);
-    await db.execute(sql`UPDATE expenses SET status = 'aprovada' WHERE status IN ('agendada', 'paga')`);
-    await db.execute(sql`UPDATE expenses SET expense_type = 'reembolso_colaborador' WHERE expense_type = 'reembolso'`);
-    await db.execute(sql`UPDATE expenses SET expense_type = 'outros' WHERE expense_type IN ('adiantamento', 'impostos')`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id text PRIMARY KEY,
+        applied_at text NOT NULL
+      )
+    `);
     await db.execute(sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS event_date text NOT NULL DEFAULT ''`);
     await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 1`);
     await db.execute(sql`
@@ -285,6 +313,23 @@ async function ensureSeededOnce(): Promise<void> {
         reset_at text NOT NULL
       )
     `);
+    if (!(await hasAppliedMigration(db, LEGACY_STATUS_ROLES_MIGRATION))) {
+      await db.execute(sql`UPDATE users SET role = 'master' WHERE role = 'admin'`);
+      await db.execute(sql`UPDATE users SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
+      await db.execute(sql`UPDATE invitations SET role = 'master' WHERE role = 'admin'`);
+      await db.execute(sql`UPDATE invitations SET role = 'admin_financeiro' WHERE role = 'financeiro'`);
+      await db.execute(sql`UPDATE expenses SET area = 'financeiro' WHERE area IS NULL OR area = ''`);
+      await db.execute(sql`UPDATE expenses SET status = 'em_analise' WHERE status = 'enviada'`);
+      await db.execute(sql`UPDATE expenses SET status = 'devolvido' WHERE status = 'aguardando_documentacao'`);
+      await db.execute(sql`UPDATE expenses SET status = 'aprovada' WHERE status IN ('agendada', 'paga')`);
+      await db.execute(sql`UPDATE expenses SET expense_type = 'reembolso_colaborador' WHERE expense_type = 'reembolso'`);
+      await db.execute(sql`UPDATE expenses SET expense_type = 'outros' WHERE expense_type IN ('adiantamento', 'impostos')`);
+      await db.execute(sql`
+        INSERT INTO schema_migrations (id, applied_at)
+        VALUES (${LEGACY_STATUS_ROLES_MIGRATION}, ${new Date().toISOString()})
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
   } catch {
     // Columns may not exist until drizzle push; next request after schema sync will migrate.
   }

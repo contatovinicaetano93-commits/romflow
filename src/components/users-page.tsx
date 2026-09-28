@@ -205,6 +205,8 @@ export function UsersPage({
   companyId,
   companyName,
   currentUserId,
+  search = "",
+  onSearch,
   onInvite,
   onRotateInvite,
   onUpdateUser,
@@ -220,13 +222,17 @@ export function UsersPage({
   companyId?: string | null;
   companyName?: string | null;
   currentUserId: string;
+  search?: string;
+  onSearch?: (value: string) => void;
   onInvite: (
     email: string,
     role: Role,
     companyIds: string[],
     areaIds: RequestArea[],
   ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
-  onRotateInvite: (invitationId: string) => Promise<string>;
+  onRotateInvite: (
+    invitationId: string,
+  ) => Promise<{ token: string; emailSent: boolean; emailError?: string; invitation: Invitation }>;
   onUpdateUser: (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => Promise<void>;
   onUpdateInvitation: (
     invitationId: string,
@@ -239,7 +245,9 @@ export function UsersPage({
   onResetDirectory: () => Promise<number>;
   onCancelInvite: (invitationId: string) => Promise<void>;
 }) {
-  const [query, setQuery] = useState("");
+  const [queryLocal, setQueryLocal] = useState("");
+  const query = onSearch ? search : queryLocal;
+  const setQuery = onSearch ?? setQueryLocal;
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("solicitante");
@@ -269,15 +277,20 @@ export function UsersPage({
   const [resetPhrase, setResetPhrase] = useState("");
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState<number | null>(null);
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
 
   const directoryUsers = useMemo(() => visibleDirectoryUsers(users), [users]);
 
   const scopedUsers = directoryUsers;
 
-  const pendingInvites = useMemo(
-    () => invitations.filter((item) => !item.accepted),
-    [invitations],
-  );
+  const pendingInvites = useMemo(() => {
+    const q = query.toLowerCase();
+    return invitations.filter(
+      (item) =>
+        !item.accepted &&
+        `${item.email} ${ROLE_LABEL[item.role]}`.toLowerCase().includes(q),
+    );
+  }, [invitations, query]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -330,19 +343,33 @@ export function UsersPage({
   }
 
   async function handleCopyInvite(invitationId: string) {
+    if (rotatingId) {
+      return;
+    }
     if (
       !window.confirm(
-        "Isso gera um link novo e invalida o convite enviado por e-mail. Continuar?",
+        "Isso gera um link novo, reenvia o e-mail e invalida o convite anterior. Continuar?",
       )
     ) {
       return;
     }
     setError("");
+    setRotatingId(invitationId);
     try {
-      const token = await onRotateInvite(invitationId);
-      await copyLink(signupUrl(token), invitationId);
+      const rotated = await onRotateInvite(invitationId);
+      const link = signupUrl(rotated.token);
+      setCreated({
+        email: rotated.invitation.email,
+        link,
+        emailSent: rotated.emailSent,
+        emailError: rotated.emailError,
+      });
+      setOpen(true);
+      await copyLink(link, invitationId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível copiar o link.");
+      setError(caught instanceof Error ? caught.message : "Não foi possível gerar o novo link.");
+    } finally {
+      setRotatingId(null);
     }
   }
 
@@ -697,11 +724,12 @@ export function UsersPage({
                   <button
                     className="secondary-button"
                     type="button"
-                    title="Gera um novo link e invalida o enviado por e-mail"
+                    disabled={Boolean(rotatingId)}
+                    title="Gera um novo link, reenvia o e-mail e invalida o anterior"
                     onClick={() => void handleCopyInvite(item.id)}
                   >
-                    {copied === item.id ? <Check size={14} /> : <Copy size={14} />}
-                    {copied === item.id ? "Link copiado" : "Gerar novo link"}
+                    {rotatingId === item.id ? null : copied === item.id ? <Check size={14} /> : <Copy size={14} />}
+                    {rotatingId === item.id ? "Gerando..." : copied === item.id ? "Link copiado" : "Gerar novo link"}
                   </button>
                   <button
                     className="danger-text-button"
@@ -733,7 +761,7 @@ export function UsersPage({
                   <Link2 size={20} />
                 </div>
                 <div>
-                  <h3>Usuário criado</h3>
+                  <h3>{created.email ? "Link de acesso" : "Usuário criado"}</h3>
                   <p className="modal-lead">
                     Envie este link para {created.email}. A pessoa informa o nome e cadastra a senha.
                   </p>

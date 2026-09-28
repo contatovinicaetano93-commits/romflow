@@ -10,6 +10,7 @@ export function CompanySelect({
   user,
   companies,
   expenses,
+  inboxCounts = {},
   onSelect,
   onLogout,
   onOpenSettings,
@@ -17,6 +18,7 @@ export function CompanySelect({
   user: User;
   companies: Company[];
   expenses: Expense[];
+  inboxCounts?: Record<string, number>;
   onSelect: (id: string) => void;
   onLogout: () => void;
   onOpenSettings?: () => void;
@@ -74,6 +76,8 @@ export function CompanySelect({
           <div className="company-grid">
             {companies.map((company, index) => {
               const inbox = companyInbox(user, expenses, company.id);
+              const inboxCount = inboxCounts[company.id] ?? inbox.length;
+              const extra = Math.max(0, inboxCount - inbox.length);
               const open = openId === company.id;
               return (
                 <div key={company.id} className="company-card-wrap">
@@ -97,7 +101,7 @@ export function CompanySelect({
                       <ArrowRight size={16} />
                     </div>
                   </button>
-                  {inbox.length > 0 ? (
+                  {inboxCount > 0 ? (
                     <button
                       type="button"
                       className="company-inbox-badge"
@@ -107,7 +111,7 @@ export function CompanySelect({
                       }}
                     >
                       <Bell size={14} />
-                      {inbox.length}
+                      {inboxCount}
                     </button>
                   ) : null}
                   {open ? (
@@ -122,6 +126,7 @@ export function CompanySelect({
                           {item.title} · {AREA_LABEL[item.area]} · {STATUS_LABEL[item.status]}
                         </p>
                       ))}
+                      {extra > 0 ? <p>e mais {extra}</p> : null}
                     </div>
                   ) : null}
                 </div>

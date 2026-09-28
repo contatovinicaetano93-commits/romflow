@@ -2,6 +2,7 @@ import type {
   AuditAction,
   EmailLogKind,
   EmailLogStatus,
+  Expense,
   ExpenseStatus,
   ExpenseType,
   PaymentMethod,
@@ -90,6 +91,17 @@ export const STATUS_LABEL: Record<ExpenseStatus, string> = {
   cancelada: "Cancelada",
 };
 
+export const STATUS_COLOR: Record<ExpenseStatus, string> = {
+  em_analise: "#6366f1",
+  devolvido: "#f59e0b",
+  aprovada: "#10b981",
+  recusada: "#ef4444",
+  aberta: "#3b82f6",
+  em_andamento: "#06b6d4",
+  finalizada: "#34d399",
+  cancelada: "#71717a",
+};
+
 export const STATUS_CLASS: Record<ExpenseStatus, string> = {
   em_analise: "status-violet",
   devolvido: "status-amber",
@@ -118,6 +130,16 @@ export const ROLE_CLASS: Record<Role, string> = {
   admin_rh: "role-admin",
   solicitante: "role-solicitante",
 };
+
+export function matchesExpenseSearch(item: Expense, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return true;
+  }
+  return `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]} ${STATUS_LABEL[item.status]} ${item.description} ${item.event_project}`
+    .toLowerCase()
+    .includes(q);
+}
 
 export const AREA_LABEL: Record<RequestArea, string> = {
   financeiro: "Financeiro",
