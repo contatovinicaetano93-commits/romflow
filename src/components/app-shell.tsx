@@ -28,7 +28,7 @@ import {
 import { ROLE_LABEL, STATUS_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import { canAccessArea, canManageUsers, isAdminInbox } from "@/lib/workflow";
+import { canAccessArea, canManageUsers, isAdminInbox, isSolicitanteInbox } from "@/lib/workflow";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 
 type NavItem = {
@@ -265,10 +265,13 @@ export function AppShell({
   const allItems = navItemsFor(user);
   const items = company ? allItems : allItems.filter((item) => isGroupAdminScreen(item.screen));
   const tabs = company ? bottomNavItems(user) : items.slice(0, 4);
-  const recent = [...expenses]
+  const pending = expenses.filter((item) =>
+    user.role === "solicitante" ? isSolicitanteInbox(item) : isAdminInbox(item),
+  );
+  const recent = [...pending]
     .sort((a, b) => b.updated.localeCompare(a.updated) || b.created.localeCompare(a.created))
     .slice(0, 6);
-  const pendingCount = expenses.filter((item) => isAdminInbox(item)).length;
+  const pendingCount = pending.length;
   const [passwordOpen, setPasswordOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const showSearch = isSearchableScreen(screen);
@@ -421,10 +424,10 @@ export function AppShell({
                 <div className="header-popover notification-popover">
                   <div className="popover-title">
                     <strong>Notificações</strong>
-                    <span>Status atualizado recentemente</span>
+                    <span>Pendências da sua fila</span>
                   </div>
                   {recent.length === 0 ? (
-                    <p>Nenhuma notificação no momento.</p>
+                    <p>Nada pendente na sua fila.</p>
                   ) : (
                     recent.map((item) => (
                       <button

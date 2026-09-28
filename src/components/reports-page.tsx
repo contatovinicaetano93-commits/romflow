@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart3, CheckCircle2, PieChart, Search, Wallet } from "lucide-react";
-import { STATUS_COLOR, STATUS_LABEL, matchesExpenseSearch, money } from "@/lib/format";
+import { AREA_LABEL, STATUS_COLOR, STATUS_LABEL, matchesExpenseSearch, money } from "@/lib/format";
 import type { Category, Expense, ExpenseStatus } from "@/lib/types";
 
 const STATUS_ORDER: ExpenseStatus[] = [
@@ -46,14 +46,26 @@ export function ReportsPage({
   const paid = visible.filter((item) => Boolean(item.payment_proof));
   const paidTotal = paid.reduce((sum, item) => sum + item.amount, 0);
   const ticket = visible.length ? total / visible.length : 0;
-  const categories = categoryOptions
-    .map((item) => {
-      const value = visible
-        .filter((expense) => expense.category === item.name)
-        .reduce((sum, expense) => sum + expense.amount, 0);
-      return { name: item.name, color: item.color, value, pct: total ? Math.round((value / total) * 100) : 0 };
-    })
-    .filter((item) => item.value > 0);
+  const knownCategories = new Map(categoryOptions.map((item) => [item.name, item]));
+  const categoryTotals = new Map<string, { name: string; color: string; value: number }>();
+  for (const expense of visible) {
+    const known = knownCategories.get(expense.category);
+    const name = known?.name || expense.category.trim() || AREA_LABEL[expense.area];
+    const current = categoryTotals.get(name) ?? {
+      name,
+      color: known?.color ?? "#71717a",
+      value: 0,
+    };
+    current.value += expense.amount;
+    categoryTotals.set(name, current);
+  }
+  const categories = [...categoryTotals.values()]
+    .filter((item) => item.value > 0)
+    .map((item) => ({
+      ...item,
+      pct: total ? Math.round((item.value / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
   const byStatus = STATUS_ORDER.map((status) => ({
     status,
     count: visible.filter((item) => item.status === status).length,

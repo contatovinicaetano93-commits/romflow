@@ -57,6 +57,13 @@ const EMPTY_DB: Database = {
   inboxCounts: {},
 };
 
+type PickerState = {
+  items: Expense[];
+  counts: Record<string, number>;
+};
+
+const EMPTY_PICKER: PickerState = { items: [], counts: {} };
+
 function patchPickerInbox(
   user: User | null,
   current: Expense[],
@@ -245,8 +252,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Database>(EMPTY_DB);
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
-  const [pickerInbox, setPickerInbox] = useState<Expense[]>([]);
-  const [inboxCounts, setInboxCounts] = useState<Record<string, number>>({});
+  const [picker, setPicker] = useState<PickerState>(EMPTY_PICKER);
   const [workingCompanyId, setWorkingCompanyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const selectSeq = useRef(0);
@@ -262,8 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncSentryUser(null);
       setCompany(null);
       setWorkingCompanyId(null);
-      setPickerInbox([]);
-      setInboxCounts({});
+      setPicker(EMPTY_PICKER);
       setDb(EMPTY_DB);
       setNotice("Sessão expirada. Entre de novo.");
     };
@@ -274,8 +279,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const applyBootstrap = useCallback((snapshot: Database | null | undefined): boolean => {
     if (snapshot) {
-      setPickerInbox(snapshot.expenses);
-      setInboxCounts(snapshot.inboxCounts ?? {});
+      setPicker({
+        items: snapshot.expenses,
+        counts: snapshot.inboxCounts ?? {},
+      });
       setDb((current) => ({
         revision: snapshot.revision,
         companies: snapshot.companies,
@@ -290,8 +297,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (snapshot === null) {
-      setPickerInbox([]);
-      setInboxCounts({});
+      setPicker(EMPTY_PICKER);
       setDb(EMPTY_DB);
       return true;
     }
@@ -301,8 +307,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refreshDirectory = useCallback(async (nextUser?: User | null) => {
     const active = nextUser === undefined ? user : nextUser;
     if (!active) {
-      setPickerInbox([]);
-      setInboxCounts({});
+      setPicker(EMPTY_PICKER);
       setDb(EMPTY_DB);
       return;
     }
@@ -330,12 +335,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return;
     }
-    const data = await api<OpsSnapshot>("/api/data?scope=ops");
-    setDb((current) => ({
-      ...current,
-      auditLogs: data.auditLogs,
-      emailLogs: data.emailLogs,
-    }));
+    try {
+      const data = await api<OpsSnapshot>("/api/data?scope=ops");
+      setDb((current) => ({
+        ...current,
+        auditLogs: data.auditLogs,
+        emailLogs: data.emailLogs,
+      }));
+    } catch (caught) {
+      setNotice(
+        caught instanceof Error ? caught.message : "Não foi possível carregar a auditoria.",
+      );
+      throw caught;
+    }
   }, [user]);
 
   const settleUser = useCallback(
@@ -352,8 +364,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         await refreshDirectory(nextUser);
       } catch {
-        setPickerInbox([]);
-        setInboxCounts({});
+        setPicker(EMPTY_PICKER);
         setDb(EMPTY_DB);
       }
     },
@@ -368,8 +379,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!session.user) {
       setCompany(null);
       setWorkingCompanyId(null);
-      setPickerInbox([]);
-      setInboxCounts({});
+      setPicker(EMPTY_PICKER);
       setDb(EMPTY_DB);
       return;
     }
@@ -382,8 +392,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         await refreshDirectory(session.user);
       } catch {
-        setPickerInbox([]);
-        setInboxCounts({});
+        setPicker(EMPTY_PICKER);
         setDb(EMPTY_DB);
       }
     }
@@ -405,8 +414,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         auditLogs: data.auditLogs,
         emailLogs: data.emailLogs,
       }));
-    } catch {
-      return;
+    } catch (caught) {
+      setNotice(
+        caught instanceof Error ? caught.message : "Não foi possível carregar a auditoria.",
+      );
     }
   }, [applyBootstrap, company, refreshCompany, refreshDirectory]);
 
@@ -432,8 +443,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
           } catch {
             if (!cancelled) {
-              setPickerInbox([]);
-              setInboxCounts({});
+              setPicker(EMPTY_PICKER);
               setDb(EMPTY_DB);
             }
           }
@@ -442,8 +452,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setUser(null);
           syncSentryUser(null);
-          setPickerInbox([]);
-          setInboxCounts({});
+          setPicker(EMPTY_PICKER);
           setDb(EMPTY_DB);
         }
       } finally {
@@ -496,8 +505,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncSentryUser(null);
     setCompany(null);
     setWorkingCompanyId(null);
-    setPickerInbox([]);
-    setInboxCounts({});
+    setPicker(EMPTY_PICKER);
     setDb(EMPTY_DB);
   }, []);
 
@@ -585,17 +593,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: [result.expense, ...current.expenses.filter((item) => item.id !== result.expense.id)],
       }));
-      setPickerInbox((current) => {
-        const patched = patchPickerInbox(user, current, inboxCounts, result.expense);
-        setInboxCounts(patched.counts);
-        return patched.items;
-      });
+      setPicker((current) => patchPickerInbox(user, current.items, current.counts, result.expense));
       if (input.company) {
         void refreshCompany(input.company).catch(() => undefined);
       }
       return result.expense;
     },
-    [inboxCounts, refreshCompany, user],
+    [refreshCompany, user],
   );
 
   const applyFinanceAction = useCallback(
@@ -616,17 +620,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
       }));
-      setPickerInbox((current) => {
-        const patched = patchPickerInbox(user, current, inboxCounts, result.expense);
-        setInboxCounts(patched.counts);
-        return patched.items;
-      });
+      setPicker((current) => patchPickerInbox(user, current.items, current.counts, result.expense));
       const companyId = result.expense.company;
       if (companyId) {
         void refreshCompany(companyId).catch(() => undefined);
       }
     },
-    [inboxCounts, refreshCompany, user],
+    [refreshCompany, user],
   );
 
   const inviteUser = useCallback(
@@ -876,8 +876,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       db,
       user,
       company,
-      pickerInbox,
-      inboxCounts,
+      pickerInbox: picker.items,
+      inboxCounts: picker.counts,
       workingCompanyId,
       login,
       bootstrapAdmin,
@@ -934,8 +934,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       logout,
       needsSetup,
       notice,
-      pickerInbox,
-      inboxCounts,
+      picker,
       ready,
       selectCompany,
       switchCompany,

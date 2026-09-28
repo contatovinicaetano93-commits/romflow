@@ -136,7 +136,8 @@ export function matchesExpenseSearch(item: Expense, query: string): boolean {
   if (!q) {
     return true;
   }
-  return `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]} ${STATUS_LABEL[item.status]} ${item.description} ${item.event_project}`
+  const code = shortId(item.id).toLowerCase();
+  return `${item.title} ${item.beneficiary_name} ${item.category} ${AREA_LABEL[item.area]} ${STATUS_LABEL[item.status]} ${item.description} ${item.event_project} ${item.id} ${code} #${code}`
     .toLowerCase()
     .includes(q);
 }

@@ -118,7 +118,7 @@ export function CompanySelect({
                     <div className="company-inbox-popup">
                       <strong>
                         {user.role === "solicitante"
-                          ? "Devolvidas e respondidas"
+                          ? "Devolvidas para você ajustar"
                           : "Em andamento e para aprovar"}
                       </strong>
                       {inbox.map((item) => (

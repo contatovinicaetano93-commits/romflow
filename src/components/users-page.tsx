@@ -279,6 +279,7 @@ export function UsersPage({
   const [resetDone, setResetDone] = useState<number | null>(null);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
 
+  const [now] = useState(() => Date.now());
   const directoryUsers = useMemo(() => visibleDirectoryUsers(users), [users]);
 
   const scopedUsers = directoryUsers;
@@ -338,8 +339,12 @@ export function UsersPage({
   }
 
   async function copyLink(link: string, id: string) {
-    await navigator.clipboard.writeText(link);
-    setCopied(id);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(id);
+    } catch {
+      setError("Não foi possível copiar o link. Selecione e copie manualmente.");
+    }
   }
 
   async function handleCopyInvite(invitationId: string) {
@@ -711,7 +716,10 @@ export function UsersPage({
                 <span>
                   <strong>{item.email}</strong>
                   <small>
-                    {ROLE_LABEL[item.role]} • Expira em {formatDate(item.expires)}
+                    {ROLE_LABEL[item.role]} •{" "}
+                    {new Date(item.expires).getTime() < now
+                      ? "Expirado — gere um novo link"
+                      : `Expira em ${formatDate(item.expires)}`}
                   </small>
                   <div className="invitation-companies">
                     <CompanyChips ids={item.companyIds} companies={companies} />

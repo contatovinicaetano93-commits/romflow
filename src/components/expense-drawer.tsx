@@ -106,21 +106,25 @@ function pairRows<T>(items: T[]): T[][] {
 
 function PaymentCredentials({ expense }: { expense: Expense }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState("");
 
   async function copyValue(label: string, value: string) {
     try {
       await navigator.clipboard.writeText(value);
+      setCopyError("");
       setCopied(label);
       window.setTimeout(() => {
         setCopied((current) => (current === label ? null : current));
       }, 1600);
     } catch {
       setCopied(null);
+      setCopyError("Não foi possível copiar. Selecione o valor e copie manualmente.");
     }
   }
 
   return (
     <div className="beneficiary-table-card payment-credentials">
+      {copyError ? <div className="form-error">{copyError}</div> : null}
       {pairRows(paymentCredentialRows(expense)).map((pair, index) => (
         <div key={pair.map((item) => item.label).join("-")} className={cls("beneficiary-table-row", index > 0 && "border-top")}>
           {pair.map((item) => (

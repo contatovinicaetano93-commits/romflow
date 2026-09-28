@@ -173,7 +173,7 @@ export function ExpenseForm({
     event.preventDefault();
     if (step < 3) {
       if (canContinue) {
-        setStep((current) => current + 1);
+        setStep(step + 1);
       }
       return;
     }

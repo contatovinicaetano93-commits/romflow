@@ -516,12 +516,11 @@ export function isWaitingPayment(expense: Expense): boolean {
 export function isSolicitanteInbox(expense: Expense): boolean {
   switch (expense.status) {
     case "devolvido":
+      return true;
     case "aprovada":
     case "recusada":
     case "finalizada":
-      return true;
     case "em_andamento":
-      return expense.area === "compras";
     case "em_analise":
     case "aberta":
     case "cancelada":

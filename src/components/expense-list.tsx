@@ -72,6 +72,9 @@ export function ExpenseList({
       onOpen(item);
       return;
     }
+    if (busyId) {
+      return;
+    }
     setBusyId(item.id);
     setActionError("");
     try {
@@ -197,7 +200,7 @@ export function ExpenseList({
                           <button
                             type="button"
                             className="primary-button destructive-button"
-                            disabled={busyId === item.id}
+                            disabled={Boolean(busyId)}
                             onClick={() => void run(item, "cancel")}
                           >
                             Confirmar cancelamento
@@ -210,7 +213,7 @@ export function ExpenseList({
                         <MaintenanceStatusActions
                           expense={item}
                           actions={actions}
-                          busy={busyId === item.id}
+                          busy={Boolean(busyId)}
                           onAction={(action) => {
                             if (action === "cancel") {
                               setConfirmCancel(item.id);

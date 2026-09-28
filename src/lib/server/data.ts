@@ -478,7 +478,7 @@ async function loadInboxExpenses(
 ): Promise<{ items: Expense[]; counts: Record<string, number> }> {
   const filters = [inArray(expenses.status, [...INBOX_STATUSES])];
   if (actor.role === "solicitante") {
-    filters.push(eq(expenses.requesterId, actor.id));
+    filters.push(eq(expenses.requesterId, actor.id), eq(expenses.status, "devolvido"));
   } else if (!isMaster(actor.role) && actor.companyIds.length > 0) {
     filters.push(inArray(expenses.companyId, actor.companyIds));
   } else if (!isMaster(actor.role)) {
@@ -563,9 +563,6 @@ export async function getCompanyWorkset(actor: User, companyId: string): Promise
   const visibleExpenses = expenseRows.map(mapExpense).filter((item) => canSeeExpense(actor, item));
   if (actor.role === "solicitante") {
     return { expenses: visibleExpenses, users: [actor] };
-  }
-  if (isMaster(actor.role)) {
-    return { expenses: visibleExpenses, users: [] };
   }
   const allUsers = await loadAllUsers();
   return { expenses: visibleExpenses, users: usersForSnapshot(actor, allUsers, visibleExpenses) };
@@ -1337,16 +1334,35 @@ export async function cancelInvitationRecord(actor: User, invitationId: string):
   await writeAudit(actor.id, "REVOKE_USER", invitationId, row.email, "convite cancelado");
 }
 
-export async function createCompanyRecord(
-  actor: User,
-  input: { name: string; color: string },
-): Promise<Company> {
-  const slug = input.name
+function uniqueCompanySlug(name: string, taken: Set<string>): string {
+  const base = name
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+  if (!base) {
+    throw new Error("Informe um nome de empresa com letras ou números.");
+  }
+  if (!taken.has(base)) {
+    return base;
+  }
+  let suffix = 2;
+  let candidate = `${base}-${suffix}`;
+  while (taken.has(candidate)) {
+    suffix += 1;
+    candidate = `${base}-${suffix}`;
+  }
+  return candidate;
+}
+
+export async function createCompanyRecord(
+  actor: User,
+  input: { name: string; color: string },
+): Promise<Company> {
+  const db = getDb();
+  const existing = await db.select({ slug: companies.slug }).from(companies);
+  const slug = uniqueCompanySlug(input.name, new Set(existing.map((row) => row.slug)));
   const companyItem: Company = {
     id: uid("cmp"),
     name: input.name,
@@ -1361,7 +1377,6 @@ export async function createCompanyRecord(
     color: input.color,
     is_active: true,
   };
-  const db = getDb();
   await db.insert(companies).values({
     id: companyItem.id,
     name: companyItem.name,
