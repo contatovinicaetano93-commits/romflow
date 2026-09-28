@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       error: "Não foi possível enviar o e-mail.",
     };
     try {
-      mail = await sendInviteEmail(created.invitation, user.name);
+      mail = await sendInviteEmail(created.invitation, user.name, created.plaintextToken);
     } catch (caught) {
       mail = {
         sent: false,
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     }
     return jsonOk({
       invitation: created.invitation,
+      plaintextToken: created.plaintextToken,
       releasedUserId: created.releasedUserId,
       emailSent: mail.sent,
       emailError: mail.error,

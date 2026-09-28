@@ -428,6 +428,9 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
       }
     }
     if (expense.area === "manutencao") {
+      if (canReview && (expense.status === "aberta" || expense.status === "em_andamento" || expense.status === "devolvido")) {
+        actions.push("docs");
+      }
       if (expense.status === "aberta") {
         if (canReview) {
           actions.push("progress", "complete", "reject");
@@ -439,6 +442,9 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
         } else {
           actions.push("attach_proof");
         }
+      }
+      if (expense.status === "devolvido" && canReview) {
+        actions.push("reject");
       }
       if (expense.status === "finalizada") {
         actions.push("attach_proof");
@@ -524,7 +530,7 @@ export function nextStatus(action: RequestAction, expense: Expense): ExpenseStat
     case "approve":
       return "aprovada";
     case "reject":
-      return expense.area === "manutencao" ? "cancelada" : "recusada";
+      return "recusada";
     case "resubmit":
       return expense.area === "manutencao" ? "aberta" : "em_analise";
     case "attach_proof":

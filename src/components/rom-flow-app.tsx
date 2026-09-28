@@ -338,6 +338,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             companyName={store.company?.name ?? null}
             currentUserId={store.user!.id}
             onInvite={store.inviteUser}
+            onRotateInvite={store.rotateInviteLink}
             onUpdateUser={store.updateUserAccess}
             onUpdateInvitation={store.updateInvitationAccess}
             onToggle={store.toggleUserStatus}
