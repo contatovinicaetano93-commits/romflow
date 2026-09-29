@@ -63,6 +63,9 @@ export function TicketForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) {
+      return;
+    }
     if (!title.trim() || !description.trim()) {
       setError("Preencha título e descrição.");
       return;
@@ -108,7 +111,7 @@ export function TicketForm({
   }
 
   return (
-    <form className="expense-form-page" onSubmit={submit}>
+    <form className="expense-form-page" onSubmit={submit} noValidate>
       <section className="premium-form-card">
         <div className="form-step">
           <div className="form-step-title">
@@ -200,8 +203,12 @@ export function TicketForm({
             </div>
           ) : null}
         </div>
-        {error ? <div className="form-error" style={{ margin: "0 24px 16px" }}>{error}</div> : null}
         <div className="form-footer">
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <span>{AREA_LABEL[area]} • {company.name}</span>
           <div className="form-footer-actions">
             <button type="button" className="secondary-button" onClick={onCancel}>

@@ -167,6 +167,28 @@ export function isGroupAdminScreen(screen: Screen): boolean {
   return screen === "settings" || screen === "users" || screen === "audit";
 }
 
+export function isComposerScreen(screen: Screen): boolean {
+  switch (screen) {
+    case "new-financeiro":
+    case "new-manutencao":
+    case "new-compras":
+    case "new-rh":
+      return true;
+    case "dashboard":
+    case "expenses":
+    case "my-expenses":
+    case "approvals":
+    case "payments":
+    case "reports":
+    case "users":
+    case "audit":
+    case "settings":
+      return false;
+    default:
+      return assertNever(screen);
+  }
+}
+
 export function isSearchableScreen(screen: Screen): boolean {
   switch (screen) {
     case "dashboard":
@@ -275,6 +297,7 @@ export function AppShell({
   const [passwordOpen, setPasswordOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const showSearch = isSearchableScreen(screen);
+  const composerOpen = isComposerScreen(screen);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -312,7 +335,7 @@ export function AppShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={cls("app-shell", composerOpen && "composer-open")}>
       {menuOpen ? (
         <button className="mobile-overlay" aria-label="Fechar menu" onClick={onToggleMenu} />
       ) : null}
@@ -485,38 +508,42 @@ export function AppShell({
         </header>
         <div className="content-area">{children}</div>
       </div>
-      <button
-        className={cls("refresh-fab", reloading && "reloading")}
-        type="button"
-        onClick={onReload}
-        disabled={reloading}
-        aria-label="Atualizar"
-      >
-        <RefreshCw size={20} />
-        <span>Atualizar</span>
-      </button>
-      <nav className="bottom-nav" aria-label="Navegação do aplicativo">
-        {tabs.map((item) => {
-          const Icon = item.icon;
-          const active = screen === item.screen;
-          return (
-            <button
-              key={item.screen}
-              type="button"
-              className={cls(active && "active")}
-              onClick={() => onNavigate(item.screen)}
-            >
-              <Icon size={20} />
-              {shortNavLabel(item)}
-              {item.screen === "approvals" && pendingCount > 0 ? <em>{pendingCount}</em> : null}
-            </button>
-          );
-        })}
-        <button type="button" className={cls(menuOpen && "active")} onClick={onToggleMenu}>
-          <Menu size={20} />
-          Menu
+      {composerOpen ? null : (
+        <button
+          className={cls("refresh-fab", reloading && "reloading")}
+          type="button"
+          onClick={onReload}
+          disabled={reloading}
+          aria-label="Atualizar"
+        >
+          <RefreshCw size={20} />
+          <span>Atualizar</span>
         </button>
-      </nav>
+      )}
+      {composerOpen ? null : (
+        <nav className="bottom-nav" aria-label="Navegação do aplicativo">
+          {tabs.map((item) => {
+            const Icon = item.icon;
+            const active = screen === item.screen;
+            return (
+              <button
+                key={item.screen}
+                type="button"
+                className={cls(active && "active")}
+                onClick={() => onNavigate(item.screen)}
+              >
+                <Icon size={20} />
+                {shortNavLabel(item)}
+                {item.screen === "approvals" && pendingCount > 0 ? <em>{pendingCount}</em> : null}
+              </button>
+            );
+          })}
+          <button type="button" className={cls(menuOpen && "active")} onClick={onToggleMenu}>
+            <Menu size={20} />
+            Menu
+          </button>
+        </nav>
+      )}
       {passwordOpen ? (
         <ChangePasswordDialog onSubmit={onChangePassword} onClose={() => setPasswordOpen(false)} />
       ) : null}

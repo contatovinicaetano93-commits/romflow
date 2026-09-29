@@ -145,7 +145,7 @@ export function ExpenseForm({
           )
         : step === 2
           ? Boolean((receiptStored || form.receipt_justification.trim().length >= 15) && !preparingFile)
-          : !preparingFile;
+          : Boolean(confirmed && !preparingFile);
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -172,9 +172,6 @@ export function ExpenseForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (step < 3) {
-      if (canContinue) {
-        setStep(step + 1);
-      }
       return;
     }
     if (!confirmed) {
@@ -183,6 +180,9 @@ export function ExpenseForm({
     }
     if (preparingFile) {
       setError("Aguarde a nota fiscal terminar de carregar.");
+      return;
+    }
+    if (submitting) {
       return;
     }
     setSubmitting(true);
@@ -238,7 +238,7 @@ export function ExpenseForm({
   }
 
   return (
-    <form className="expense-form-page page-stack" onSubmit={handleSubmit}>
+    <form className="expense-form-page page-stack" onSubmit={handleSubmit} noValidate>
       <section className="kindness-banner fade-in">
         <div className="kindness-content">
           <span className="kindness-icon-pulse">
@@ -660,7 +660,12 @@ export function ExpenseForm({
               <input
                 type="checkbox"
                 checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
+                onChange={(event) => {
+                  setConfirmed(event.target.checked);
+                  if (event.target.checked) {
+                    setError("");
+                  }
+                }}
               />
               <p>
                 Confirmo que os dados informados estão corretos e os documentos anexados são autênticos.
@@ -668,8 +673,12 @@ export function ExpenseForm({
             </label>
           </div>
         ) : null}
-        {error ? <div className="form-error" style={{ margin: "0 24px 16px" }}>{error}</div> : null}
         <div className="form-footer">
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <span>Etapa {step + 1} de 4 • Ambiente corporativo protegido</span>
           <div className="form-footer-actions">
             {step > 0 ? (
@@ -685,15 +694,25 @@ export function ExpenseForm({
                 Cancelar
               </button>
             )}
-            <button className="primary-button" type="submit" disabled={!canContinue || submitting}>
-              {submitting ? (
-                <span className="spinner" />
-              ) : step < 3 ? (
-                preparingFile ? "Preparando arquivo…" : "Continuar"
-              ) : (
-                "Enviar solicitação"
-              )}
-            </button>
+            {step < 3 ? (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!canContinue || submitting}
+                onClick={() => {
+                  if (canContinue) {
+                    setStep(step + 1);
+                  }
+                }}
+              >
+                {preparingFile ? "Preparando arquivo…" : "Continuar"}
+              </button>
+            ) : (
+              <button className="primary-button" type="submit" disabled={submitting || preparingFile}>
+                {submitting ? <span className="spinner" /> : null}
+                {submitting ? "Enviando…" : "Enviar solicitação"}
+              </button>
+            )}
           </div>
         </div>
       </section>

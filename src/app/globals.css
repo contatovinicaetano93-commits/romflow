@@ -1220,4 +1220,70 @@ body {
   }
 }
 
+.app-shell.composer-open .refresh-fab,
+.app-shell.composer-open .bottom-nav {
+  display: none;
+}
+
+.form-footer {
+  flex-wrap: wrap;
+}
+
+.form-footer .form-error {
+  flex: 1 0 100%;
+  margin: 0 0 8px;
+}
+
+.app-shell.composer-open .expense-form-page .form-footer {
+  z-index: 40;
+}
+
+@media (max-width: 700px) {
+  .app-shell.composer-open {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .app-shell.composer-open .content-area {
+    padding-bottom: 24px;
+  }
+
+  .app-shell.composer-open .premium-form-card {
+    overflow: visible;
+  }
+
+  .app-shell.composer-open .expense-form-page {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.composer-open .expense-form-page .form-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .form-footer-actions .primary-button,
+  .form-footer-actions .secondary-button {
+    touch-action: manipulation;
+  }
+
+  .form-step > label.confirmation-box {
+    min-height: 44px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .confirmation-box input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    flex: 0 0 22px;
+    margin-top: 0;
+  }
+}
+
 
