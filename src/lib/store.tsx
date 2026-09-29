@@ -13,7 +13,7 @@ import {
 } from "react";
 import { canAccessCompany } from "./access";
 import { isTombstoneEmail } from "./user-directory";
-import { companyInbox } from "./workflow";
+import { INBOX_SAMPLE_PER_COMPANY, companyInbox } from "./workflow";
 import type {
   Category,
   Company,
@@ -64,20 +64,23 @@ type PickerState = {
 
 const EMPTY_PICKER: PickerState = { items: [], counts: {} };
 
+function isInboxItem(user: User | null, expense: Expense | null | undefined): expense is Expense {
+  return Boolean(user && expense && companyInbox(user, [expense], expense.company).length > 0);
+}
+
 function patchPickerInbox(
   user: User | null,
   current: Expense[],
   counts: Record<string, number>,
   next: Expense,
+  previous?: Expense | null,
 ): { items: Expense[]; counts: Record<string, number> } {
   const nextCounts = { ...counts };
-  const existing = current.find((item) => item.id === next.id);
-  if (existing && user) {
-    if (companyInbox(user, [existing], existing.company).length > 0) {
-      nextCounts[existing.company] = Math.max(0, (nextCounts[existing.company] ?? 1) - 1);
-    }
+  const before = previous ?? current.find((item) => item.id === next.id);
+  if (isInboxItem(user, before)) {
+    nextCounts[before.company] = Math.max(0, (nextCounts[before.company] ?? 1) - 1);
   }
-  const belongs = Boolean(user && companyInbox(user, [next], next.company).length > 0);
+  const belongs = isInboxItem(user, next);
   if (belongs) {
     nextCounts[next.company] = (nextCounts[next.company] ?? 0) + 1;
   }
@@ -329,7 +332,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       users: mergeUsers(current.users, data.users),
     }));
     setWorkingCompanyId(companyId);
-  }, []);
+    setPicker((current) => {
+      if (!user) {
+        return current;
+      }
+      const inbox = companyInbox(user, data.expenses, companyId);
+      const others = current.items.filter((item) => item.company !== companyId);
+      return {
+        items: [...inbox.slice(0, INBOX_SAMPLE_PER_COMPANY), ...others],
+        counts: { ...current.counts, [companyId]: inbox.length },
+      };
+    });
+  }, [user]);
 
   const loadOps = useCallback(async () => {
     if (!user) {
@@ -604,6 +618,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const applyFinanceAction = useCallback(
     async (expenseId: string, action: FinanceAction, payload?: FinanceActionPayload) => {
+      const previous = db.expenses.find((item) => item.id === expenseId) ?? null;
       const result = await api<{ expense: Expense; emailSent?: boolean; emailError?: string }>(
         "/api/expenses/action",
         {
@@ -620,13 +635,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         expenses: current.expenses.map((item) => (item.id === result.expense.id ? result.expense : item)),
       }));
-      setPicker((current) => patchPickerInbox(user, current.items, current.counts, result.expense));
+      setPicker((current) =>
+        patchPickerInbox(user, current.items, current.counts, result.expense, previous),
+      );
       const companyId = result.expense.company;
       if (companyId) {
         void refreshCompany(companyId).catch(() => undefined);
       }
     },
-    [refreshCompany, user],
+    [db.expenses, refreshCompany, user],
   );
 
   const inviteUser = useCallback(

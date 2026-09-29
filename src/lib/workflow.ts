@@ -14,6 +14,8 @@ import type {
 } from "@/lib/types";
 import { assertNever } from "@/lib/types";
 
+export const INBOX_SAMPLE_PER_COMPANY = 8;
+
 export const REQUEST_AREAS: RequestArea[] = ["financeiro", "manutencao", "compras", "rh"];
 
 export const ROLES: Role[] = [

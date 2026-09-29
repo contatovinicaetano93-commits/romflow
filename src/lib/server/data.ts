@@ -40,6 +40,7 @@ import {
   canSeeExpense,
   defaultAreasForRole,
   initialStatus,
+  INBOX_SAMPLE_PER_COMPANY,
   isAdminInbox,
   isMaster,
   isSolicitanteInbox,
@@ -395,7 +396,6 @@ const INBOX_STATUSES = [
   "finalizada",
 ] as const;
 
-const INBOX_SAMPLE_PER_COMPANY = 8;
 const INVITE_TTL_MS = 30 * 86_400_000;
 
 export function emptySnapshot(): Database {
