@@ -99,6 +99,8 @@ export async function invalidateAndClearSession(): Promise<void> {
     if (session?.userId) {
       await bumpSessionVersion(session.userId);
     }
+  } catch {
+    // Cookie removal still finishes logout when the version bump fails.
   } finally {
     await clearSession();
   }

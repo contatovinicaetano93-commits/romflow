@@ -15,10 +15,11 @@ export function MaintenanceStatusActions({
   busy?: boolean;
   onAction: (action: FinanceAction) => void;
 }) {
-  const [confirmComplete, setConfirmComplete] = useState(false);
+  const [confirmForId, setConfirmForId] = useState<string | null>(null);
   const canProgress = actions.includes("progress");
   const canComplete = actions.includes("complete");
   const canCancel = actions.includes("cancel");
+  const confirmComplete = confirmForId === expense.id && canComplete;
 
   if (confirmComplete) {
     return (
@@ -28,7 +29,7 @@ export function MaintenanceStatusActions({
           className="primary-button"
           disabled={busy}
           onClick={() => {
-            setConfirmComplete(false);
+            setConfirmForId(null);
             onAction("complete");
           }}
         >
@@ -38,7 +39,7 @@ export function MaintenanceStatusActions({
           type="button"
           className="secondary-button"
           disabled={busy}
-          onClick={() => setConfirmComplete(false)}
+          onClick={() => setConfirmForId(null)}
         >
           Voltar
         </button>
@@ -68,7 +69,7 @@ export function MaintenanceStatusActions({
           canComplete && "next",
         )}
         disabled={busy || !canComplete}
-        onClick={() => setConfirmComplete(true)}
+        onClick={() => setConfirmForId(expense.id)}
       >
         {canComplete ? "Finalizar" : "Finalizado"}
       </button>
