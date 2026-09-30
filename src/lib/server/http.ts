@@ -9,6 +9,9 @@ export function errorStatus(message: string, fallback = 400): number {
   if (message.startsWith("Muitas tentativas")) {
     return 429;
   }
+  if (message === "Não foi possível carregar os dados agora. Atualize a tela.") {
+    return 503;
+  }
   return fallback;
 }
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Plus, Search, Sparkles, Wallet } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, ClipboardCheck, LayoutDashboard, Search, Sparkles, Wallet } from "lucide-react";
 import { useState } from "react";
 import { CATEGORY_COLOR, KINDNESS_PHRASES, matchesExpenseSearch, money } from "@/lib/format";
 import type { Category, Company, Expense, Role, Screen, User } from "@/lib/types";
-import { newRequestScreen } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
+import { NewRequestButton } from "./new-request-button";
 
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -57,7 +57,6 @@ export function Dashboard({
 }) {
   const [now] = useState(() => Date.now());
   const isEmpty = expenses.length === 0;
-  const createScreen = newRequestScreen(user);
   const paid = expenses.filter((item) => Boolean(item.payment_proof) || item.status === "finalizada");
   const pending = expenses.filter(
     (item) =>
@@ -193,17 +192,13 @@ export function Dashboard({
           <p>Acompanhe o que pede sua atenção nesta empresa.</p>
         </div>
         {role === "solicitante" ? (
-          <button className="primary-button" onClick={() => onNavigate(createScreen)}>
-            <Plus size={18} /> Nova solicitação
-          </button>
+          <NewRequestButton user={user} onNavigate={onNavigate} />
         ) : (
           <div className="dashboard-header-actions">
             <button className="secondary-button" onClick={() => onNavigate("approvals")}>
               <ClipboardCheck size={17} /> Fila de aprovação
             </button>
-            <button className="primary-button" onClick={() => onNavigate(createScreen)}>
-              <Plus size={18} /> Nova solicitação
-            </button>
+            <NewRequestButton user={user} onNavigate={onNavigate} />
           </div>
         )}
       </section>

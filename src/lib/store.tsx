@@ -281,30 +281,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyBootstrap = useCallback((snapshot: Database | null | undefined): boolean => {
-    if (snapshot) {
-      setPicker({
-        items: snapshot.expenses,
-        counts: snapshot.inboxCounts ?? {},
-      });
-      setDb((current) => ({
-        revision: snapshot.revision,
-        companies: snapshot.companies,
-        categories: snapshot.categories,
-        users: snapshot.users,
-        invitations: snapshot.invitations,
-        expenses: current.expenses,
-        auditLogs: current.auditLogs,
-        emailLogs: current.emailLogs,
-        inboxCounts: snapshot.inboxCounts ?? {},
-      }));
-      return true;
+    if (!snapshot) {
+      return false;
     }
-    if (snapshot === null) {
-      setPicker(EMPTY_PICKER);
-      setDb(EMPTY_DB);
-      return true;
-    }
-    return false;
+    const companyIds = new Set(snapshot.companies.map((item) => item.id));
+    setPicker({
+      items: snapshot.expenses,
+      counts: snapshot.inboxCounts ?? {},
+    });
+    setDb((current) => ({
+      revision: snapshot.revision,
+      companies: snapshot.companies,
+      categories: snapshot.categories,
+      users: snapshot.users,
+      invitations: snapshot.invitations,
+      expenses: current.expenses.filter((item) => companyIds.has(item.company)),
+      auditLogs: current.auditLogs,
+      emailLogs: current.emailLogs,
+      inboxCounts: snapshot.inboxCounts ?? {},
+    }));
+    return true;
   }, []);
 
   const refreshDirectory = useCallback(async (nextUser?: User | null) => {
@@ -377,9 +373,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       try {
         await refreshDirectory(nextUser);
-      } catch {
+      } catch (caught) {
         setPicker(EMPTY_PICKER);
         setDb(EMPTY_DB);
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar os dados agora. Atualize a tela.",
+        );
       }
     },
     [applyBootstrap, refreshDirectory],
@@ -405,9 +404,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!applyBootstrap(session.snapshot)) {
       try {
         await refreshDirectory(session.user);
-      } catch {
+      } catch (caught) {
         setPicker(EMPTY_PICKER);
         setDb(EMPTY_DB);
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar os dados agora. Atualize a tela.",
+        );
       }
     }
     const nextCompany =
@@ -455,10 +457,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (!cancelled) {
               applyBootstrap(snapshot);
             }
-          } catch {
+          } catch (caught) {
             if (!cancelled) {
               setPicker(EMPTY_PICKER);
               setDb(EMPTY_DB);
+              setNotice(
+                caught instanceof Error
+                  ? caught.message
+                  : "Não foi possível carregar os dados agora. Atualize a tela.",
+              );
             }
           }
         }

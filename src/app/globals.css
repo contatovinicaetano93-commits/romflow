@@ -1286,4 +1286,63 @@ body {
   }
 }
 
+.new-request-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.new-request-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.new-request-menu button {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.new-request-menu button:hover,
+.new-request-menu button:focus-visible {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 700px) {
+  .welcome-row .new-request-picker,
+  .dashboard-header-actions .new-request-picker,
+  .page-title-row .new-request-picker {
+    display: flex;
+    width: 100%;
+  }
+
+  .welcome-row .new-request-picker .primary-button,
+  .dashboard-header-actions .new-request-picker .primary-button,
+  .page-title-row .new-request-picker .primary-button {
+    width: 100%;
+  }
+
+  .new-request-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
+}
+
 

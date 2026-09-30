@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppShell, canAccessScreen, isGroupAdminScreen, isSearchableScreen } from "@/components/app-shell";
+import {
+  AppShell,
+  canAccessScreen,
+  isComposerScreen,
+  isGroupAdminScreen,
+  isSearchableScreen,
+} from "@/components/app-shell";
 import { AuditPage } from "@/components/audit-page";
 import { CompanySelect } from "@/components/company-select";
 import { Dashboard } from "@/components/dashboard";
@@ -81,6 +87,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         return;
       }
       setScreen(next);
+      setSelected(null);
       closePopovers();
       if (!isSearchableScreen(next)) {
         setSearch("");
@@ -248,7 +255,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             title={store.user!.role === "solicitante" ? "Minhas solicitações" : "Todas as solicitações"}
             subtitle={
               store.user!.role === "solicitante"
-                ? "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado."
+                ? "Manutenção: mude o status aqui — em andamento, finalizar ou cancelar."
                 : "Visão completa das solicitações desta empresa."
             }
             eyebrow={store.user!.role === "solicitante" ? "MEU FLUXO" : "TODAS AS OPERAÇÕES"}
@@ -406,6 +413,10 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }}
         onBack={() => {
           closePopovers();
+          if (isComposerScreen(visibleScreen)) {
+            navigate(store.user!.role === "solicitante" ? "expenses" : "my-expenses");
+            return;
+          }
           const home = homeScreen(store.user!.role);
           if (visibleScreen !== home) {
             navigate(home);

@@ -263,6 +263,12 @@ export async function persistStoredFile(
   if (!file.dataUrl) {
     throw new Error("Arquivo inválido.");
   }
+  if (typeof file.size === "number" && file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("O arquivo deve ter no máximo 10 MB.");
+  }
+  if (file.dataUrl.length > MAX_UPLOAD_BYTES * 2) {
+    throw new Error("Este arquivo está grande demais. Envie um PDF menor ou uma foto.");
+  }
   const contentType = storedContentType(file.type, file.name);
   assertBlobReady();
   if (!blobEnabled()) {
@@ -274,6 +280,9 @@ export async function persistStoredFile(
   const comma = file.dataUrl.indexOf(",");
   const base64 = comma >= 0 ? file.dataUrl.slice(comma + 1) : file.dataUrl;
   const body = Buffer.from(base64, "base64");
+  if (body.length > MAX_UPLOAD_BYTES) {
+    throw new Error("O arquivo deve ter no máximo 10 MB.");
+  }
   const blob = await put(`${BLOB_PREFIX}${folder}/${uid("file")}-${safeName(file.name)}`, body, {
     ...blobCallOptions(),
     addRandomSuffix: true,

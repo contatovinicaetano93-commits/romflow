@@ -592,19 +592,21 @@ export async function getSnapshot(actor: User): Promise<Database> {
   };
 }
 
-export async function getBootstrapSnapshotSafe(actor: User): Promise<Database | null> {
+export const SNAPSHOT_UNAVAILABLE = "Não foi possível carregar os dados agora. Atualize a tela.";
+
+export async function getBootstrapSnapshotSafe(actor: User): Promise<Database | undefined> {
   try {
     return await getBootstrapSnapshot(actor);
   } catch {
-    return null;
+    return undefined;
   }
 }
 
-export async function getSnapshotSafe(actor: User): Promise<Database | null> {
+export async function getSnapshotSafe(actor: User): Promise<Database | undefined> {
   try {
     return await getSnapshot(actor);
   } catch {
-    return null;
+    return undefined;
   }
 }
 

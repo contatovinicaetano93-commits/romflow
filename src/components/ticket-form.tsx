@@ -39,7 +39,8 @@ export function TicketForm({
   const [rhType, setRhType] = useState<ExpenseType>("ferias");
   const [file, setFile] = useState<File | null>(null);
   const [stored, setStored] = useState<StoredFile | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -48,7 +49,7 @@ export function TicketForm({
     if (!next) {
       return;
     }
-    setBusy(true);
+    setPreparing(true);
     try {
       setFile(next);
       setStored(await fileToStored(next));
@@ -57,20 +58,20 @@ export function TicketForm({
       setStored(null);
       setError(caught instanceof Error ? caught.message : "Não foi possível ler o arquivo.");
     } finally {
-      setBusy(false);
+      setPreparing(false);
     }
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (busy) {
+    if (preparing || submitting) {
       return;
     }
     if (!title.trim() || !description.trim()) {
       setError("Preencha título e descrição.");
       return;
     }
-    setBusy(true);
+    setSubmitting(true);
     setError("");
     const type: ExpenseType = area === "manutencao" ? "chamado" : area === "compras" ? "pedido" : rhType;
     try {
@@ -106,7 +107,7 @@ export function TicketForm({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível enviar.");
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   }
 
@@ -119,7 +120,7 @@ export function TicketForm({
               <h3>{AREA_LABEL[area]}</h3>
               <p>
                 {area === "manutencao"
-                  ? "Depois, em Minhas solicitações, marque Em andamento, Finalizado ou Cancelado."
+                    ? "Depois, em Minhas solicitações, marque Em andamento, Finalizar ou Cancelar."
                   : area === "compras"
                     ? "Abra o pedido. O admin de compras valida e anda o chamado."
                     : "Abra a solicitação. O admin de RH analisa, devolve, aprova ou recusa."}
@@ -214,8 +215,8 @@ export function TicketForm({
             <button type="button" className="secondary-button" onClick={onCancel}>
               Cancelar
             </button>
-            <button className="primary-button" type="submit" disabled={busy}>
-              {busy ? "Enviando…" : "Enviar solicitação"}
+            <button className="primary-button" type="submit" disabled={preparing || submitting}>
+              {preparing ? "Preparando arquivo…" : submitting ? "Enviando…" : "Enviar solicitação"}
             </button>
           </div>
         </div>

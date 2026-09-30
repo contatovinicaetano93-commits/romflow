@@ -131,7 +131,7 @@ export function ExpenseForm({
       ? Boolean(
           form.title &&
             form.description &&
-            form.amount &&
+            parseMoneyInput(form.amount) > 0 &&
             form.max_payment_date &&
             (!reimbursement || form.event_date) &&
             (!needsDateJustification || form.payment_date_justification.trim()),
@@ -180,6 +180,10 @@ export function ExpenseForm({
     }
     if (preparingFile) {
       setError("Aguarde a nota fiscal terminar de carregar.");
+      return;
+    }
+    if (parseMoneyInput(form.amount) <= 0) {
+      setError("Informe um valor maior que zero.");
       return;
     }
     if (submitting) {

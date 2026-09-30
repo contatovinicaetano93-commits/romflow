@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { cls } from "@/lib/format";
 import type { Expense, FinanceAction, RequestAction } from "@/lib/types";
 
@@ -14,9 +15,36 @@ export function MaintenanceStatusActions({
   busy?: boolean;
   onAction: (action: FinanceAction) => void;
 }) {
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const canProgress = actions.includes("progress");
   const canComplete = actions.includes("complete");
   const canCancel = actions.includes("cancel");
+
+  if (confirmComplete) {
+    return (
+      <div className="list-cancel-confirm">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={busy}
+          onClick={() => {
+            setConfirmComplete(false);
+            onAction("complete");
+          }}
+        >
+          Confirmar finalização
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => setConfirmComplete(false)}
+        >
+          Voltar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="maintenance-status-actions">
@@ -30,7 +58,7 @@ export function MaintenanceStatusActions({
         disabled={busy || !canProgress}
         onClick={() => onAction("progress")}
       >
-        Em andamento
+        {canProgress ? "Colocar em andamento" : "Em andamento"}
       </button>
       <button
         type="button"
@@ -40,9 +68,9 @@ export function MaintenanceStatusActions({
           canComplete && "next",
         )}
         disabled={busy || !canComplete}
-        onClick={() => onAction("complete")}
+        onClick={() => setConfirmComplete(true)}
       >
-        Finalizado
+        {canComplete ? "Finalizar" : "Finalizado"}
       </button>
       <button
         type="button"
@@ -54,7 +82,7 @@ export function MaintenanceStatusActions({
         disabled={busy || !canCancel}
         onClick={() => onAction("cancel")}
       >
-        Cancelado
+        {canCancel ? "Cancelar" : "Cancelado"}
       </button>
     </div>
   );

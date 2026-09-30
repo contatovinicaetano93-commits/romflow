@@ -48,26 +48,27 @@ async function sessionCookieSecure(): Promise<boolean> {
 }
 
 async function readSessionVersion(userId: string): Promise<number> {
-  try {
-    const [row] = await getDb()
-      .select({ sessionVersion: users.sessionVersion })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-    return row?.sessionVersion ?? 1;
-  } catch {
-    return 1;
+  const [row] = await getDb()
+    .select({ sessionVersion: users.sessionVersion })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row) {
+    throw new Error("Sessão expirada.");
   }
+  return row.sessionVersion;
 }
 
 export async function bumpSessionVersion(userId: string): Promise<number> {
-  const next = (await readSessionVersion(userId)) + 1;
-  try {
-    await getDb().update(users).set({ sessionVersion: next }).where(eq(users.id, userId));
-  } catch {
-    // Column may not exist until ensureSeeded migrates the schema.
+  const [row] = await getDb()
+    .update(users)
+    .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, userId))
+    .returning({ sessionVersion: users.sessionVersion });
+  if (!row) {
+    throw new Error("Sessão expirada.");
   }
-  return next;
+  return row.sessionVersion;
 }
 
 export async function createSession(userId: string, sessionVersion?: number): Promise<void> {
@@ -94,10 +95,13 @@ export async function clearSession(): Promise<void> {
 
 export async function invalidateAndClearSession(): Promise<void> {
   const session = await readSession();
-  if (session?.userId) {
-    await bumpSessionVersion(session.userId);
+  try {
+    if (session?.userId) {
+      await bumpSessionVersion(session.userId);
+    }
+  } finally {
+    await clearSession();
   }
-  await clearSession();
 }
 
 async function readSession(): Promise<{ userId: string; sv: number } | null> {
@@ -148,7 +152,11 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!user || user.status !== "active") {
     return null;
   }
-  if ((await readSessionVersion(user.id)) !== session.sv) {
+  try {
+    if ((await readSessionVersion(user.id)) !== session.sv) {
+      return null;
+    }
+  } catch {
     return null;
   }
   return user;

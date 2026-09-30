@@ -1,11 +1,12 @@
 "use client";
 
-import { Filter, Plus, Search } from "lucide-react";
+import { Filter, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AREA_LABEL, matchesExpenseSearch, money, shortId } from "@/lib/format";
 import type { Expense, ExpenseStatus, FinanceAction, RequestArea, Screen, User } from "@/lib/types";
-import { allowedActions, newRequestScreen } from "@/lib/workflow";
+import { allowedActions } from "@/lib/workflow";
 import { MaintenanceStatusActions } from "./maintenance-status-actions";
+import { NewRequestButton } from "./new-request-button";
 import { StatusBadge } from "./status-badge";
 
 const STATUS_FILTERS: Array<{ value: "todos" | ExpenseStatus; label: string }> = [
@@ -24,7 +25,7 @@ export function ExpenseList({
   expenses,
   search,
   title = "Minhas solicitações",
-  subtitle = "Manutenção: mude o status aqui — em andamento, finalizado ou cancelado.",
+  subtitle = "Manutenção: mude o status aqui — em andamento, finalizar ou cancelar.",
   eyebrow = "MEU FLUXO",
   companyNames = {},
   user,
@@ -95,9 +96,7 @@ export function ExpenseList({
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
-        <button className="primary-button" onClick={() => onNavigate(newRequestScreen(user))}>
-          <Plus size={18} /> Nova Solicitação
-        </button>
+        <NewRequestButton user={user} onNavigate={onNavigate} label="Nova Solicitação" />
       </section>
       {actionError ? <div className="form-error">{actionError}</div> : null}
       <section className="list-summary">
@@ -121,7 +120,7 @@ export function ExpenseList({
             <strong>{hasMaintenance ? "Mude o status do chamado aqui" : "Abra o detalhe para decidir"}</strong>
             <small>
               {hasMaintenance
-                ? "Em andamento, finalizado ou cancelado — um clique"
+                ? "Em andamento, finalizar ou cancelar — com confirmação"
                 : "Aprove, devolva ou recuse pelo detalhe"}
             </small>
           </p>

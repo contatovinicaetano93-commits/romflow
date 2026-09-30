@@ -1,13 +1,13 @@
 import { canAccessCompany } from "@/lib/access";
 import {
-  emptySnapshot,
-  getBootstrapSnapshotSafe,
+  SNAPSHOT_UNAVAILABLE,
+  getBootstrapSnapshot,
   getCompanyWorkset,
   getOpsSnapshot,
-  getSnapshotSafe,
+  getSnapshot,
 } from "@/lib/server/data";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
-import { jsonError, jsonOk, publicError } from "@/lib/server/http";
+import { errorStatus, jsonError, jsonOk, publicError } from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +37,13 @@ export async function GET(request: Request) {
     const scope = parseScope(url.searchParams.get("scope"), companyId);
     switch (scope) {
       case "bootstrap": {
-        const snapshot = await getBootstrapSnapshotSafe(user);
-        return jsonOk(snapshot ?? { ...emptySnapshot(), users: [user] }, 200, {
-          "Cache-Control": "no-store, max-age=0",
-        });
+        try {
+          return jsonOk(await getBootstrapSnapshot(user), 200, {
+            "Cache-Control": "no-store, max-age=0",
+          });
+        } catch {
+          return jsonError(SNAPSHOT_UNAVAILABLE, 503);
+        }
       }
       case "company": {
         if (!companyId) {
@@ -55,10 +58,13 @@ export async function GET(request: Request) {
       case "ops":
         return jsonOk(await getOpsSnapshot(user), 200, { "Cache-Control": "no-store, max-age=0" });
       case "full": {
-        const snapshot = await getSnapshotSafe(user);
-        return jsonOk(snapshot ?? { ...emptySnapshot(), users: [user] }, 200, {
-          "Cache-Control": "no-store, max-age=0",
-        });
+        try {
+          return jsonOk(await getSnapshot(user), 200, {
+            "Cache-Control": "no-store, max-age=0",
+          });
+        } catch {
+          return jsonError(SNAPSHOT_UNAVAILABLE, 503);
+        }
       }
       default: {
         const exhaustive: never = scope;
@@ -67,6 +73,6 @@ export async function GET(request: Request) {
     }
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, message === "Sessão expirada." ? 401 : errorStatus(message));
   }
 }

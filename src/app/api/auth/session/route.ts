@@ -12,7 +12,7 @@ export async function GET() {
       {
         user,
         needsSetup: (await userCount()) === 0,
-        snapshot: user ? await getBootstrapSnapshotSafe(user) : null,
+        snapshot: user ? ((await getBootstrapSnapshotSafe(user)) ?? null) : null,
       },
       200,
       { "Cache-Control": "no-store, max-age=0" },
