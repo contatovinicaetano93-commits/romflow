@@ -407,9 +407,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       } catch (caught) {
         setPicker(EMPTY_PICKER);
         setDb(EMPTY_DB);
+        setCompany(null);
+        setWorkingCompanyId(null);
         setNotice(
           caught instanceof Error ? caught.message : "Não foi possível carregar os dados agora. Atualize a tela.",
         );
+        // A still-selected company looks like lost access and switchCompany clears this notice.
+        return;
       }
     }
     const nextCompany =
@@ -521,7 +525,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await api("/api/auth/logout", { method: "POST" });
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // The server drops the cookie before a version bump can fail the response.
+    }
     setUser(null);
     syncSentryUser(null);
     setCompany(null);
