@@ -108,11 +108,14 @@ export function assertSafeBlobPathname(pathname: string): string {
     trimmed.includes("\\") ||
     trimmed.startsWith("/") ||
     trimmed.includes("://") ||
-    /[%_?#]/.test(trimmed)
+    /[%?#]/.test(trimmed)
   ) {
     throw new Error("Arquivo inválido.");
   }
   if (!trimmed.startsWith(BLOB_PREFIX)) {
+    throw new Error("Arquivo inválido.");
+  }
+  if (!/^romflow\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)+$/.test(trimmed)) {
     throw new Error("Arquivo inválido.");
   }
   return trimmed;
