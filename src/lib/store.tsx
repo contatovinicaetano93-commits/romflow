@@ -442,6 +442,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         auditLogs: data.auditLogs,
         emailLogs: data.emailLogs,
       }));
+      if (!worksetFailed) {
+        setNotice(null);
+      }
     } catch (caught) {
       if (!worksetFailed) {
         setNotice(
@@ -588,6 +591,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const switchCompany = useCallback(() => {
+    setNotice(null);
     setCompany(null);
     setWorkingCompanyId(null);
     void refreshDirectory().catch((caught) => {
