@@ -43,6 +43,16 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
   const [reloading, setReloading] = useState(false);
   const [viewEpoch, setViewEpoch] = useState(0);
   const [pickingCompany, setPickingCompany] = useState(false);
+  const userId = store.user?.id ?? null;
+  const [sessionUserId, setSessionUserId] = useState<string | null>(userId);
+  if (sessionUserId !== userId) {
+    setSessionUserId(userId);
+    setSelected(null);
+    setMenuOpen(false);
+    setNotificationsOpen(false);
+    setProfileOpen(false);
+    setPickingCompany(false);
+  }
 
   const greeting = KINDNESS_PHRASES[new Date().getDate() % KINDNESS_PHRASES.length];
   const accessibleCompanies = store.accessibleCompanies();
@@ -185,6 +195,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
             inboxCounts={store.inboxCounts}
             onSelect={(id) => {
               setPickingCompany(false);
+              setSelected(null);
               void store.selectCompany(id);
               setScreen(homeScreen(store.user?.role ?? "solicitante"));
             }}
@@ -312,6 +323,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         }
         return (
           <TicketForm
+            key={area}
             area={area}
             company={store.company!}
             user={store.user!}
@@ -327,6 +339,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         return (
           <FinancePage
             mode="approvals"
+            user={store.user!}
             expenses={expenses}
             users={store.db.users}
             search={search}
@@ -338,6 +351,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
         return (
           <FinancePage
             mode="payments"
+            user={store.user!}
             expenses={expenses}
             users={store.db.users}
             search={search}
@@ -471,6 +485,7 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
       {selected &&
       (store.user.role !== "solicitante" || selected.requester === store.user.id) ? (
         <ExpenseDrawer
+          key={selected.id}
           expense={store.db.expenses.find((item) => item.id === selected.id) ?? selected}
           requester={store.findUser(selected.requester)}
           companyName={store.findCompany(selected.company)?.name ?? store.company?.name ?? "Empresa"}

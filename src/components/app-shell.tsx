@@ -28,7 +28,7 @@ import {
 import { ROLE_LABEL, STATUS_LABEL, cls, initials } from "@/lib/format";
 import type { Company, Expense, Role, Screen, User } from "@/lib/types";
 import { assertNever } from "@/lib/types";
-import { canAccessArea, canManageUsers, isAdminInbox, isSolicitanteInbox } from "@/lib/workflow";
+import { canAccessArea, canManageUsers, isInboxItem } from "@/lib/workflow";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 
 type NavItem = {
@@ -287,9 +287,7 @@ export function AppShell({
   const allItems = navItemsFor(user);
   const items = company ? allItems : allItems.filter((item) => isGroupAdminScreen(item.screen));
   const tabs = company ? bottomNavItems(user) : items.slice(0, 4);
-  const pending = expenses.filter((item) =>
-    user.role === "solicitante" ? isSolicitanteInbox(item) : isAdminInbox(item),
-  );
+  const pending = expenses.filter((item) => isInboxItem(user, item));
   const recent = [...pending]
     .sort((a, b) => b.updated.localeCompare(a.updated) || b.created.localeCompare(a.created))
     .slice(0, 6);

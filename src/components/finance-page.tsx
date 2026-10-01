@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { AREA_LABEL, daysUntil, formatDate, matchesExpenseSearch, money, shortId } from "@/lib/format";
 import type { Expense, User } from "@/lib/types";
-import { isAdminInbox, isWaitingPayment } from "@/lib/workflow";
+import { isInboxItem, isWaitingPayment } from "@/lib/workflow";
 import { StatusBadge } from "./status-badge";
 
 type ApprovalTab = "review" | "returned" | "approved" | "rejected";
@@ -18,6 +18,7 @@ type PaymentTab = "waiting" | "paid";
 
 export function FinancePage({
   mode,
+  user,
   expenses,
   users,
   search = "",
@@ -25,6 +26,7 @@ export function FinancePage({
   onOpen,
 }: {
   mode: "approvals" | "payments";
+  user: User;
   expenses: Expense[];
   users: User[];
   search?: string;
@@ -37,7 +39,10 @@ export function FinancePage({
   const query = onSearch ? search : localQuery;
   const setQuery = onSearch ?? setLocalQuery;
 
-  const queue = useMemo(() => expenses.filter((item) => isAdminInbox(item)), [expenses]);
+  const queue = useMemo(
+    () => expenses.filter((item) => isInboxItem(user, item)),
+    [expenses, user],
+  );
   const returned = useMemo(() => expenses.filter((item) => item.status === "devolvido"), [expenses]);
   const decided = useMemo(
     () => expenses.filter((item) => item.status === "aprovada" || item.status === "finalizada"),

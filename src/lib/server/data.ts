@@ -41,9 +41,8 @@ import {
   defaultAreasForRole,
   initialStatus,
   INBOX_SAMPLE_PER_COMPANY,
-  isAdminInbox,
+  isInboxItem,
   isMaster,
-  isSolicitanteInbox,
   nextApproverId,
   nextReviewNote,
   nextStatus,
@@ -166,6 +165,44 @@ async function countOtherActiveMasters(excludeUserId: string): Promise<number> {
   return adminRows.filter(
     (item) => item.id !== excludeUserId && item.status === "active" && parseRole(item.role) === "master",
   ).length;
+}
+
+function executeHasRow(result: unknown): boolean {
+  if (Array.isArray(result) && result.length > 0) {
+    return true;
+  }
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows: unknown[] }).rows;
+    return Array.isArray(rows) && rows.length > 0;
+  }
+  return false;
+}
+
+function otherActiveMasterExists(excludeUserId: string) {
+  return sql`exists (
+    select 1 from users other
+    where other.id <> ${excludeUserId}
+      and other.status = 'active'
+      and other.role = 'master'
+  )`;
+}
+
+async function consumeInvitation(invitationId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const consumed = await getDb()
+    .update(invitations)
+    .set({ accepted: true })
+    .where(
+      and(
+        eq(invitations.id, invitationId),
+        eq(invitations.accepted, false),
+        sql`${invitations.expires} >= ${now}`,
+      ),
+    )
+    .returning({ id: invitations.id });
+  if (consumed.length === 0) {
+    throw new Error("Convite inválido ou já utilizado.");
+  }
 }
 
 export async function listCompaniesByIds(companyIds: string[]): Promise<Company[]> {
@@ -504,9 +541,7 @@ async function loadInboxExpenses(
     if (!canSeeExpense(actor, expense)) {
       continue;
     }
-    const relevant =
-      actor.role === "solicitante" ? isSolicitanteInbox(expense) : isAdminInbox(expense);
-    if (!relevant) {
+    if (!isInboxItem(actor, expense)) {
       continue;
     }
     const count = counts[expense.company] ?? 0;
@@ -641,15 +676,16 @@ export async function bootstrapAdmin(name: string, email: string, password: stri
     areaIds: ["financeiro", "manutencao", "compras", "rh"],
     created,
   };
-  await db.insert(users).values({
-    id: admin.id,
-    name: admin.name,
-    email: admin.email,
-    passwordHash: await hashPassword(password),
-    role: "master",
-    status: "active",
-    created,
-  });
+  const passwordHash = await hashPassword(password);
+  const inserted = await db.execute(sql`
+    insert into users (id, name, email, password_hash, role, status, created)
+    select ${admin.id}, ${admin.name}, ${admin.email}, ${passwordHash}, 'master', 'active', ${created}
+    where not exists (select 1 from users limit 1)
+    returning id
+  `);
+  if (!executeHasRow(inserted)) {
+    throw new Error("Já existe um acesso cadastrado.");
+  }
   if (admin.companyIds.length) {
     await db.insert(userCompanies).values(
       admin.companyIds.map((companyId) => ({
@@ -808,6 +844,9 @@ export async function applyFinanceActionRecord(
   if ((action === "reject" || action === "docs") && !payload?.note?.trim()) {
     throw new Error("Informe a justificativa.");
   }
+  if (action === "attach_proof" && current.amount <= 0) {
+    throw new Error("Esta solicitação não tem valor a pagar.");
+  }
   if (action === "attach_proof" && !payload?.proof && !current.payment_proof) {
     throw new Error("Anexe o recibo de pagamento.");
   }
@@ -846,13 +885,14 @@ export async function applyFinanceActionRecord(
       throw new Error(`Ação não suportada: ${exhaustive}`);
     }
   }
-  const paymentProof = await persistStoredFile(
-    payload?.proof ?? current.payment_proof,
-    "proofs",
-    actor.id,
-    current.payment_proof,
-  );
-  const receipt = await persistStoredFile(payload?.receipt ?? current.receipt, "receipts", actor.id, current.receipt);
+  const paymentProof =
+    action === "attach_proof"
+      ? await persistStoredFile(payload?.proof ?? current.payment_proof, "proofs", actor.id, current.payment_proof)
+      : current.payment_proof;
+  const receipt =
+    action === "resubmit"
+      ? await persistStoredFile(payload?.receipt ?? current.receipt, "receipts", actor.id, current.receipt)
+      : current.receipt;
   const paymentFields = action === "resubmit" ? resubmitPaymentFields(current, payload) : current;
   const updated: Expense = {
     ...current,
@@ -901,13 +941,21 @@ async function cancelPendingInvitesForEmail(email: string): Promise<void> {
 async function tombstoneUserRow(row: typeof users.$inferSelect): Promise<string> {
   const nextEmail = tombstoneEmailFor(row.id);
   const db = getDb();
-  await db
+  const tombstoned = await db
     .update(users)
     .set({
       status: "inactive",
       email: nextEmail,
     })
-    .where(eq(users.id, row.id));
+    .where(
+      parseRole(row.role) === "master"
+        ? and(eq(users.id, row.id), otherActiveMasterExists(row.id))
+        : eq(users.id, row.id),
+    )
+    .returning({ id: users.id });
+  if (tombstoned.length === 0) {
+    throw new Error("É preciso manter ao menos um master ativo.");
+  }
   await replaceUserCompanies(row.id, []);
   await replaceUserAreas(row.id, []);
   await bumpSessionVersion(row.id);
@@ -1088,9 +1136,9 @@ async function applyAcceptedInvitation(
       status: "active",
     })
     .where(eq(users.id, userId));
+  await consumeInvitation(invitation.id);
   await replaceUserCompanies(userId, companyIds);
   await replaceUserAreas(userId, areaIds);
-  await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
   await cancelPendingInvitesForEmail(invitation.email);
   const sessionVersion = await bumpSessionVersion(userId);
   await createSession(userId, sessionVersion);
@@ -1124,12 +1172,14 @@ export async function acceptInvitation(token: string, name: string, password: st
       : defaultAreasForRole(invitation.role, invitation.role === "solicitante" ? ["financeiro"] : []),
     created,
   };
+  const passwordHash = await hashPassword(password);
+  await consumeInvitation(invitation.id);
   const db = getDb();
   await db.insert(users).values({
     id: nextUser.id,
     name: nextUser.name,
     email: nextUser.email,
-    passwordHash: await hashPassword(password),
+    passwordHash,
     role: nextUser.role,
     status: "active",
     created,
@@ -1143,7 +1193,6 @@ export async function acceptInvitation(token: string, name: string, password: st
     );
   }
   await replaceUserAreas(nextUser.id, nextUser.areaIds);
-  await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
   await cancelPendingInvitesForEmail(invitation.email);
   await createSession(nextUser.id);
   return nextUser;
@@ -1182,11 +1231,17 @@ export async function updateUserAccessRecord(
     }
   }
   if (parseRole(row.role) === "master" && resolvedRole !== "master") {
-    if ((await countOtherActiveMasters(userId)) === 0) {
+    const demoted = await db
+      .update(users)
+      .set({ role: resolvedRole })
+      .where(and(eq(users.id, userId), otherActiveMasterExists(userId)))
+      .returning({ id: users.id });
+    if (demoted.length === 0) {
       throw new Error("É preciso manter ao menos um master ativo.");
     }
+  } else {
+    await db.update(users).set({ role: resolvedRole }).where(eq(users.id, userId));
   }
-  await db.update(users).set({ role: resolvedRole }).where(eq(users.id, userId));
   await replaceUserCompanies(userId, resolvedCompanies);
   await replaceUserAreas(userId, resolvedAreas);
   await writeAudit(
@@ -1248,11 +1303,17 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   }
   const nextStatus = row.status === "active" ? "inactive" : "active";
   if (nextStatus === "inactive" && parseRole(row.role) === "master") {
-    if ((await countOtherActiveMasters(userId)) === 0) {
+    const deactivated = await db
+      .update(users)
+      .set({ status: "inactive" })
+      .where(and(eq(users.id, userId), eq(users.status, "active"), otherActiveMasterExists(userId)))
+      .returning({ id: users.id });
+    if (deactivated.length === 0) {
       throw new Error("É preciso manter ao menos um master ativo.");
     }
+  } else {
+    await db.update(users).set({ status: nextStatus }).where(eq(users.id, userId));
   }
-  await db.update(users).set({ status: nextStatus }).where(eq(users.id, userId));
   if (nextStatus === "inactive") {
     await bumpSessionVersion(userId);
     await cancelPendingInvitesForEmail(row.email);
@@ -1527,7 +1588,14 @@ export async function finalizePasswordResetIssue(input: {
   await db
     .update(passwordResets)
     .set({ used: true })
-    .where(and(eq(passwordResets.userId, input.userId), eq(passwordResets.used, false), ne(passwordResets.id, input.id)));
+    .where(
+      and(
+        eq(passwordResets.userId, input.userId),
+        eq(passwordResets.used, false),
+        ne(passwordResets.id, input.id),
+        sql`${passwordResets.created} < (select created from password_resets where id = ${input.id})`,
+      ),
+    );
 }
 
 async function loadValidReset(token: string) {

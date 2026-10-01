@@ -434,7 +434,7 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
       if (canReview && (expense.status === "em_analise" || expense.status === "devolvido")) {
         actions.push("docs", "approve", "reject");
       }
-      if (expense.status === "aprovada") {
+      if (expense.status === "aprovada" && expense.amount > 0) {
         actions.push("attach_proof");
       }
     }
@@ -443,12 +443,18 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
         actions.push("docs", "approve", "reject");
       }
       if (expense.status === "aprovada") {
-        actions.push("progress", "attach_proof");
+        actions.push("progress");
+        if (expense.amount > 0) {
+          actions.push("attach_proof");
+        }
       }
       if (expense.status === "em_andamento") {
-        actions.push("complete", "attach_proof");
+        actions.push("complete");
+        if (expense.amount > 0) {
+          actions.push("attach_proof");
+        }
       }
-      if (expense.status === "finalizada") {
+      if (expense.status === "finalizada" && expense.amount > 0) {
         actions.push("attach_proof");
       }
     }
@@ -463,15 +469,16 @@ export function allowedActions(user: User, expense: Expense): RequestAction[] {
       }
       if (expense.status === "em_andamento") {
         if (canReview) {
-          actions.push("complete", "reject", "attach_proof");
-        } else {
+          actions.push("complete", "reject");
+        }
+        if (expense.amount > 0) {
           actions.push("attach_proof");
         }
       }
       if (expense.status === "devolvido" && canReview) {
         actions.push("reject");
       }
-      if (expense.status === "finalizada") {
+      if (expense.status === "finalizada" && expense.amount > 0) {
         actions.push("attach_proof");
       }
     }
@@ -532,19 +539,15 @@ export function isSolicitanteInbox(expense: Expense): boolean {
   }
 }
 
+export function isInboxItem(user: User, expense: Expense): boolean {
+  if (user.role === "solicitante") {
+    return canSeeExpense(user, expense) && isSolicitanteInbox(expense);
+  }
+  return isAdminInbox(expense) && allowedActions(user, expense).length > 0;
+}
+
 export function companyInbox(user: User, expenses: Expense[], companyId: string): Expense[] {
-  return expenses.filter((expense) => {
-    if (expense.company !== companyId) {
-      return false;
-    }
-    if (!canSeeExpense(user, expense)) {
-      return false;
-    }
-    if (user.role === "solicitante") {
-      return isSolicitanteInbox(expense);
-    }
-    return isAdminInbox(expense);
-  });
+  return expenses.filter((expense) => expense.company === companyId && isInboxItem(user, expense));
 }
 
 export function nextStatus(action: RequestAction, expense: Expense): ExpenseStatus {

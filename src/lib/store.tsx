@@ -549,6 +549,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setWorkingCompanyId(null);
     setPicker(EMPTY_PICKER);
     setDb(EMPTY_DB);
+    setNotice(null);
   }, []);
 
   const selectCompany = useCallback(

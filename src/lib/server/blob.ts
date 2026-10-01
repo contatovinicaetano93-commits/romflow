@@ -199,7 +199,13 @@ export function storedFileGrantsPathname(file: StoredFile | null | undefined, pa
 function assertReusableStoredFile(file: StoredFile, actorId: string, existing?: StoredFile | null): void {
   const claimed = storedPathname(file);
   if (!claimed) {
-    return;
+    if (
+      existing &&
+      ((file.url && file.url === existing.url) || (file.dataUrl && file.dataUrl === existing.dataUrl))
+    ) {
+      return;
+    }
+    throw new Error("Arquivo inválido.");
   }
   const safe = assertSafeBlobPathname(claimed);
   if (safe.startsWith(`${BLOB_PREFIX}${actorId}/`)) {
