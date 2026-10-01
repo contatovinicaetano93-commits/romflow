@@ -21,6 +21,10 @@ export function MaintenanceStatusActions({
   const canCancel = actions.includes("cancel");
   const confirmComplete = confirmForId === expense.id && canComplete;
 
+  if (!canProgress && !canComplete && !canCancel) {
+    return null;
+  }
+
   if (confirmComplete) {
     return (
       <div className="list-cancel-confirm">

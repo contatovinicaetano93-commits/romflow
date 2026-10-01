@@ -1,6 +1,6 @@
 import { acceptInvitation } from "@/lib/server/data";
 import { ensureSeeded } from "@/lib/server/session";
-import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 import { assertRateLimit, clientKey } from "@/lib/server/rate-limit";
 
 export async function POST(request: Request) {
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const user = await acceptInvitation(body.token, body.name, body.password);
     return jsonOk({ user });
   } catch (caught) {
-    return jsonError(publicError(caught), 400);
+    const message = publicError(caught);
+    return jsonError(message, errorStatus(message));
   }
 }

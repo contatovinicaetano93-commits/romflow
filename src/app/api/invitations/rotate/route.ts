@@ -1,5 +1,5 @@
 import { rotateInvitationLink } from "@/lib/server/data";
-import { sendInviteEmail } from "@/lib/server/mail";
+import { inviteUrl, sendInviteEmail } from "@/lib/server/mail";
 import { ensureSeeded, requireAdmin } from "@/lib/server/session";
 import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     return jsonOk({
       invitation: rotated.invitation,
       plaintextToken: rotated.plaintextToken,
+      inviteUrl: inviteUrl(rotated.plaintextToken),
       emailSent: mail.sent,
       emailError: mail.error,
     });

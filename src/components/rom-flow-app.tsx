@@ -189,6 +189,8 @@ export function RomFlowApp({ inviteToken }: { inviteToken?: string }) {
               setScreen(homeScreen(store.user?.role ?? "solicitante"));
             }}
             onLogout={store.logout}
+            loadError={store.notice}
+            onRetry={() => void store.reload()}
             onOpenSettings={
               isMaster(store.user.role)
                 ? () => {

@@ -17,9 +17,6 @@ export function appUrl(): string {
   if (configured) {
     return configured;
   }
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
   }
@@ -95,20 +92,24 @@ export async function deliverEmail(input: {
   if (!apiKey) {
     error = "RESEND_API_KEY não configurada.";
   } else {
-    const resend = new Resend(apiKey);
-    const result = await resend.emails.send({
-      from,
-      to: input.toEmail,
-      subject: input.subject,
-      text: input.text,
-      html: input.html,
-    });
-    if (result.error) {
-      error = result.error.message;
-    } else {
-      sent = true;
-      const id = result.data && "id" in result.data ? result.data.id : undefined;
-      resendId = typeof id === "string" ? id : undefined;
+    try {
+      const resend = new Resend(apiKey);
+      const result = await resend.emails.send({
+        from,
+        to: input.toEmail,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+      });
+      if (result.error) {
+        error = result.error.message;
+      } else {
+        sent = true;
+        const id = result.data && "id" in result.data ? result.data.id : undefined;
+        resendId = typeof id === "string" ? id : undefined;
+      }
+    } catch (caught) {
+      error = caught instanceof Error && caught.message.trim() ? caught.message : "Não foi possível enviar o e-mail.";
     }
   }
   try {

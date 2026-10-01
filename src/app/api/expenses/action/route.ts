@@ -6,7 +6,7 @@ import {
 } from "@/lib/server/data";
 import { notifyExpenseChange } from "@/lib/server/notify";
 import { ensureSeeded, requireUser } from "@/lib/server/session";
-import { jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
+import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 
 export async function POST(request: Request) {
   try {
@@ -42,6 +42,6 @@ export async function POST(request: Request) {
     });
   } catch (caught) {
     const message = publicError(caught);
-    return jsonError(message, message === "Sessão expirada." ? 401 : 400);
+    return jsonError(message, errorStatus(message));
   }
 }

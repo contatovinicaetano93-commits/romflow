@@ -25,13 +25,13 @@ export function NewRequestButton({
     if (!open) {
       return;
     }
-    function onPointer(event: MouseEvent) {
+    function onPointer(event: Event) {
       if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", onPointer);
-    return () => document.removeEventListener("mousedown", onPointer);
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
   }, [open]);
 
   if (areas.length <= 1) {

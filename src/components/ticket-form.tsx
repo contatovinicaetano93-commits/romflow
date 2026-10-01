@@ -44,21 +44,34 @@ export function TicketForm({
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const fileEpoch = useRef(0);
 
   async function handleFile(next: File | null) {
     if (!next) {
       return;
     }
+    const epoch = ++fileEpoch.current;
     setPreparing(true);
+    setError("");
+    setFile(next);
+    setStored(null);
     try {
-      setFile(next);
-      setStored(await fileToStored(next));
+      const nextStored = await fileToStored(next);
+      if (epoch !== fileEpoch.current) {
+        return;
+      }
+      setStored(nextStored);
     } catch (caught) {
+      if (epoch !== fileEpoch.current) {
+        return;
+      }
       setFile(null);
       setStored(null);
       setError(caught instanceof Error ? caught.message : "Não foi possível ler o arquivo.");
     } finally {
-      setPreparing(false);
+      if (epoch === fileEpoch.current) {
+        setPreparing(false);
+      }
     }
   }
 
@@ -198,7 +211,17 @@ export function TicketForm({
           {file ? (
             <div className="selected-file">
               <strong>{file.name}</strong>
-              <button type="button" onClick={() => { setFile(null); setStored(null); }} aria-label="Remover">
+              <button
+                type="button"
+                disabled={preparing}
+                onClick={() => {
+                  fileEpoch.current += 1;
+                  setFile(null);
+                  setStored(null);
+                  setPreparing(false);
+                }}
+                aria-label="Remover"
+              >
                 <X size={16} />
               </button>
             </div>

@@ -24,7 +24,7 @@ export async function readJson<T>(request: Request): Promise<T> {
 }
 
 const SENSITIVE_ERROR =
-  /SESSION_SECRET|DATABASE_URL|passwordHash|ECONNREFUSED|neon\.tech|postgres:\/\/|mongodb:\/\/|redis:\/\//i;
+  /SESSION_SECRET|DATABASE_URL|passwordHash|password_hash|Failed query|DrizzleQueryError|ECONNREFUSED|neon\.tech|postgres:\/\/|mongodb:\/\/|redis:\/\/|\$2[aby]\$|params:/i;
 
 export function publicError(caught: unknown, fallback = "Não foi possível concluir a operação."): string {
   if (!(caught instanceof Error)) {

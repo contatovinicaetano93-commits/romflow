@@ -77,6 +77,7 @@ export function ExpenseForm({
   const [confirmed, setConfirmed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const fileEpoch = useRef(0);
   const activeCategories = categories.filter((item) => item.is_active);
   const categoryChoices =
     activeCategories.length > 0
@@ -155,17 +156,28 @@ export function ExpenseForm({
     if (!file) {
       return;
     }
+    const epoch = ++fileEpoch.current;
     setPreparingFile(true);
     setError("");
     setReceipt(file);
+    setReceiptStored(null);
     try {
-      setReceiptStored(await fileToStored(file));
+      const stored = await fileToStored(file);
+      if (epoch !== fileEpoch.current) {
+        return;
+      }
+      setReceiptStored(stored);
     } catch (caught) {
+      if (epoch !== fileEpoch.current) {
+        return;
+      }
       setReceipt(null);
       setReceiptStored(null);
       setError(caught instanceof Error ? caught.message : "Não foi possível ler o arquivo.");
     } finally {
-      setPreparingFile(false);
+      if (epoch === fileEpoch.current) {
+        setPreparingFile(false);
+      }
     }
   }
 
@@ -593,8 +605,10 @@ export function ExpenseForm({
                 <button
                   type="button"
                   onClick={() => {
+                    fileEpoch.current += 1;
                     setReceipt(null);
                     setReceiptStored(null);
+                    setPreparingFile(false);
                   }}
                   aria-label="Remover arquivo"
                 >

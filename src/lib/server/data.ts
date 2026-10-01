@@ -1091,6 +1091,7 @@ async function applyAcceptedInvitation(
   await replaceUserCompanies(userId, companyIds);
   await replaceUserAreas(userId, areaIds);
   await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
+  await cancelPendingInvitesForEmail(invitation.email);
   const sessionVersion = await bumpSessionVersion(userId);
   await createSession(userId, sessionVersion);
   const updated = await loadUser(userId);
@@ -1143,6 +1144,7 @@ export async function acceptInvitation(token: string, name: string, password: st
   }
   await replaceUserAreas(nextUser.id, nextUser.areaIds);
   await db.update(invitations).set({ accepted: true }).where(eq(invitations.id, invitation.id));
+  await cancelPendingInvitesForEmail(invitation.email);
   await createSession(nextUser.id);
   return nextUser;
 }
@@ -1254,6 +1256,7 @@ export async function toggleUserStatusRecord(actor: User, userId: string): Promi
   if (nextStatus === "inactive") {
     await bumpSessionVersion(userId);
     await cancelPendingInvitesForEmail(row.email);
+    await db.delete(passwordResets).where(eq(passwordResets.userId, userId));
   }
   await writeAudit(actor.id, "TOGGLE_USER", userId, row.status, nextStatus);
   const updated = await loadUser(userId);
@@ -1546,12 +1549,26 @@ export async function assertPasswordResetToken(token: string): Promise<void> {
 
 export async function resetPasswordWithToken(token: string, password: string): Promise<User> {
   assertPassword(password);
-  const row = await loadValidReset(token);
+  const db = getDb();
+  const now = new Date().toISOString();
+  const [row] = await db
+    .update(passwordResets)
+    .set({ used: true })
+    .where(
+      and(
+        eq(passwordResets.tokenHash, hashToken(token)),
+        eq(passwordResets.used, false),
+        sql`${passwordResets.expires} >= ${now}`,
+      ),
+    )
+    .returning();
+  if (!row) {
+    throw new Error("Link inválido ou expirado. Solicite uma nova redefinição de senha.");
+  }
   const user = await loadUser(row.userId);
   if (!user || user.status !== "active") {
     throw new Error("Este acesso está desativado.");
   }
-  const db = getDb();
   await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, row.userId));
   await db
     .update(passwordResets)
@@ -1578,6 +1595,7 @@ export async function changeOwnPassword(
     throw new Error("Senha atual incorreta.");
   }
   await db.update(users).set({ passwordHash: await hashPassword(nextPassword) }).where(eq(users.id, actor.id));
+  await db.delete(passwordResets).where(eq(passwordResets.userId, actor.id));
   await writeAudit(actor.id, "CHANGE_PASSWORD", actor.id, "—", "senha atualizada");
   const sessionVersion = await bumpSessionVersion(actor.id);
   await createSession(actor.id, sessionVersion);

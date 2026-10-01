@@ -7,7 +7,10 @@ import type { Company, Invitation, RequestArea, Role, User } from "@/lib/types";
 import { visibleDirectoryUsers } from "@/lib/user-directory";
 import { REQUEST_AREAS, areaForAdminRole } from "@/lib/workflow";
 
-function signupUrl(token: string) {
+function signupUrl(token: string, canonical?: string) {
+  if (canonical) {
+    return canonical;
+  }
   return `${window.location.origin}/convite?token=${token}`;
 }
 
@@ -229,10 +232,16 @@ export function UsersPage({
     role: Role,
     companyIds: string[],
     areaIds: RequestArea[],
-  ) => Promise<Invitation & { emailSent?: boolean; emailError?: string }>;
+  ) => Promise<Invitation & { emailSent?: boolean; emailError?: string; inviteUrl?: string }>;
   onRotateInvite: (
     invitationId: string,
-  ) => Promise<{ token: string; emailSent: boolean; emailError?: string; invitation: Invitation }>;
+  ) => Promise<{
+    token: string;
+    inviteUrl?: string;
+    emailSent: boolean;
+    emailError?: string;
+    invitation: Invitation;
+  }>;
   onUpdateUser: (userId: string, role: Role, companyIds: string[], areaIds: RequestArea[]) => Promise<void>;
   onUpdateInvitation: (
     invitationId: string,
@@ -362,7 +371,7 @@ export function UsersPage({
     setRotatingId(invitationId);
     try {
       const rotated = await onRotateInvite(invitationId);
-      const link = signupUrl(rotated.token);
+      const link = signupUrl(rotated.token, rotated.inviteUrl);
       setCreated({
         email: rotated.invitation.email,
         link,
@@ -392,7 +401,7 @@ export function UsersPage({
     setSubmitting(true);
     try {
       const invitation = await onInvite(email, role, selected, areas);
-      const link = signupUrl(invitation.token);
+      const link = signupUrl(invitation.token, invitation.inviteUrl);
       setCreated({
         email: invitation.email,
         link,

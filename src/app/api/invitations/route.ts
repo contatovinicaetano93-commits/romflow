@@ -1,5 +1,5 @@
 import { createInvitationRecord, updateInvitationAccessRecord } from "@/lib/server/data";
-import { sendInviteEmail } from "@/lib/server/mail";
+import { inviteUrl, sendInviteEmail } from "@/lib/server/mail";
 import { ensureSeeded, requireAdmin } from "@/lib/server/session";
 import { errorStatus, jsonError, jsonOk, publicError, readJson } from "@/lib/server/http";
 import type { RequestArea, Role } from "@/lib/types";
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     return jsonOk({
       invitation: created.invitation,
       plaintextToken: created.plaintextToken,
+      inviteUrl: inviteUrl(created.plaintextToken),
       releasedUserId: created.releasedUserId,
       emailSent: mail.sent,
       emailError: mail.error,

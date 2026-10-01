@@ -215,10 +215,16 @@ type StoreValue = {
     role: Role,
     companyIds: string[],
     areaIds: string[],
-  ) => Promise<Invitation & { emailSent: boolean; emailError?: string }>;
+  ) => Promise<Invitation & { emailSent: boolean; emailError?: string; inviteUrl?: string }>;
   rotateInviteLink: (
     invitationId: string,
-  ) => Promise<{ token: string; emailSent: boolean; emailError?: string; invitation: Invitation }>;
+  ) => Promise<{
+    token: string;
+    inviteUrl?: string;
+    emailSent: boolean;
+    emailError?: string;
+    invitation: Invitation;
+  }>;
   validateInvite: (token: string) => Promise<{ invitation: Invitation; companies: Company[] }>;
   acceptInvite: (token: string, name: string, password: string) => Promise<User>;
   toggleUserStatus: (userId: string) => Promise<void>;
@@ -418,10 +424,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const nextCompany =
       currentCompany && canAccessCompany(session.user, currentCompany.id) ? currentCompany : null;
+    let worksetFailed = false;
     if (nextCompany) {
       try {
         await refreshCompany(nextCompany.id);
       } catch (caught) {
+        worksetFailed = true;
         setNotice(
           caught instanceof Error ? caught.message : "Não foi possível carregar as solicitações.",
         );
@@ -435,9 +443,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         emailLogs: data.emailLogs,
       }));
     } catch (caught) {
-      setNotice(
-        caught instanceof Error ? caught.message : "Não foi possível carregar a auditoria.",
-      );
+      if (!worksetFailed) {
+        setNotice(
+          caught instanceof Error ? caught.message : "Não foi possível carregar a auditoria.",
+        );
+      }
     }
   }, [applyBootstrap, company, refreshCompany, refreshDirectory]);
 
@@ -578,10 +588,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const switchCompany = useCallback(() => {
-    setNotice(null);
     setCompany(null);
     setWorkingCompanyId(null);
-    void refreshDirectory().catch(() => undefined);
+    void refreshDirectory().catch((caught) => {
+      setNotice(
+        caught instanceof Error ? caught.message : "Não foi possível carregar os dados agora. Atualize a tela.",
+      );
+    });
   }, [refreshDirectory]);
 
   const accessibleCompanies = useCallback(() => {
@@ -666,6 +679,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const result = await api<{
         invitation: Invitation;
         plaintextToken: string;
+        inviteUrl?: string;
         releasedUserId?: string | null;
         emailSent: boolean;
         emailError?: string;
@@ -691,6 +705,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return {
         ...invitation,
         token: result.plaintextToken,
+        inviteUrl: result.inviteUrl,
         emailSent: result.emailSent,
         emailError: result.emailError,
       };
@@ -702,6 +717,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const result = await api<{
       invitation: Invitation;
       plaintextToken: string;
+      inviteUrl?: string;
       emailSent: boolean;
       emailError?: string;
     }>("/api/invitations/rotate", {
@@ -717,6 +733,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
     return {
       token: result.plaintextToken,
+      inviteUrl: result.inviteUrl,
       emailSent: result.emailSent,
       emailError: result.emailError,
       invitation,

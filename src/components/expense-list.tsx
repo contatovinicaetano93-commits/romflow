@@ -208,7 +208,9 @@ export function ExpenseList({
                             Voltar
                           </button>
                         </div>
-                      ) : (
+                      ) : actions.includes("progress") ||
+                        actions.includes("complete") ||
+                        actions.includes("cancel") ? (
                         <MaintenanceStatusActions
                           expense={item}
                           actions={actions}
@@ -221,7 +223,11 @@ export function ExpenseList({
                             void run(item, action);
                           }}
                         />
-                      )}
+                      ) : actions.includes("resubmit") ? (
+                        <button type="button" className="secondary-button" onClick={() => onOpen(item)}>
+                          Reenviar
+                        </button>
+                      ) : null}
                     </article>
                   );
                 })}

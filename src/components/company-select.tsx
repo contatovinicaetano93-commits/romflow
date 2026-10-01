@@ -14,6 +14,8 @@ export function CompanySelect({
   onSelect,
   onLogout,
   onOpenSettings,
+  loadError,
+  onRetry,
 }: {
   user: User;
   companies: Company[];
@@ -22,6 +24,8 @@ export function CompanySelect({
   onSelect: (id: string) => void;
   onLogout: () => void;
   onOpenSettings?: () => void;
+  loadError?: string | null;
+  onRetry?: () => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -59,13 +63,19 @@ export function CompanySelect({
         </p>
         {companies.length === 0 ? (
           <div className="empty-state">
-            <strong>Nenhuma empresa disponível</strong>
+            <strong>{loadError ? "Não foi possível carregar as empresas" : "Nenhuma empresa disponível"}</strong>
             <span>
-              {onOpenSettings
-                ? "Nenhuma empresa ativa. Reative ou cadastre em Configurações."
-                : "Peça a um master para atribuir empresas ao seu acesso."}
+              {loadError
+                ? loadError
+                : onOpenSettings
+                  ? "Nenhuma empresa ativa. Reative ou cadastre em Configurações."
+                  : "Peça a um master para atribuir empresas ao seu acesso."}
             </span>
-            {onOpenSettings ? (
+            {loadError && onRetry ? (
+              <button className="primary-button company-select-settings" type="button" onClick={onRetry}>
+                Tentar de novo
+              </button>
+            ) : onOpenSettings ? (
               <button className="primary-button company-select-settings" type="button" onClick={onOpenSettings}>
                 <Settings size={16} />
                 Abrir configurações
